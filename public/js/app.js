@@ -90,21 +90,29 @@ async function loadDashboard() {
     let txs = [];
     let budget = null;
     let goals = [];
+    let budgetRes = null;
 
     if (window.navigator.onLine) {
-      const [txRes, budgetRes, goalsRes] = await Promise.all([
+      const [txRes, bRes, goalsRes] = await Promise.all([
         api.transactions.list(`period=${currentPeriod}`),
         api.budgets.get(currentPeriod),
         api.goals.list()
       ]);
       txs = txRes.transactions || [];
-      budget = budgetRes.budget || null;
+      budgetRes = bRes;
+      budget = budgetRes?.budget || null;
       goals = goalsRes.goals || [];
     } else {
       const allLocal = await getAllLocalTransactions();
       txs = allLocal.filter(t => t.date.startsWith(currentPeriod));
       budget = await getLocalBudget(currentPeriod);
       goals = await getAllLocalGoals();
+    }
+
+    // Synchronize global period selector if present
+    const globalPeriodSelect = document.getElementById('global-period-select');
+    if (globalPeriodSelect && globalPeriodSelect.value !== currentPeriod) {
+      globalPeriodSelect.value = currentPeriod;
     }
 
     // Calculate metrics
@@ -157,11 +165,22 @@ async function loadDashboard() {
     }
 
     const monthlyBudgetPaise = budget ? budget.total_budget_paise : 0;
+    const remainingBudgetPaise = monthlyBudgetPaise > 0 ? (monthlyBudgetPaise - actualExpensesPaise) : 0;
+
+    // Use date context corresponding to currentPeriod
+    const today = new Date();
+    const todayPeriod = getCurrentPeriod(today);
+    let dateForPeriod = today;
+    if (currentPeriod !== todayPeriod) {
+      const [y, m] = currentPeriod.split('-').map(Number);
+      dateForPeriod = new Date(y, m - 1, 1);
+    }
+
     const safeDaily = calculateSafeDailySpending({
       availableBalancePaise,
       monthlyBudgetPaise,
       currentMonthExpensePaise: actualExpensesPaise,
-      currentDate: new Date(),
+      currentDate: dateForPeriod,
       totalTransactionCount: txs.length
     });
 
@@ -181,7 +200,87 @@ async function loadDashboard() {
     if (dashSavingsEl) {
       dashSavingsEl.textContent = formatINR(totalSavedInGoalsPaise);
     }
-    document.getElementById('dash-budget-total').textContent = monthlyBudgetPaise > 0 ? formatINR(monthlyBudgetPaise) : 'No Budget Set';
+
+    // Populate Monthly Budget Card on Dashboard
+    const dashBudgetTotalEl = document.getElementById('dash-budget-total');
+    const dashBudgetSpentEl = document.getElementById('dash-budget-spent');
+    const dashBudgetRemainingEl = document.getElementById('dash-budget-remaining');
+    const dashBudgetProgressEl = document.getElementById('dash-budget-progress-bar');
+    const dashBudgetStatusEl = document.getElementById('dash-budget-status');
+    const dashBudgetSubtextEl = document.getElementById('dash-budget-subtext');
+
+    if (monthlyBudgetPaise > 0) {
+      if (dashBudgetTotalEl) dashBudgetTotalEl.textContent = formatINR(monthlyBudgetPaise);
+      if (dashBudgetSpentEl) dashBudgetSpentEl.textContent = formatINR(actualExpensesPaise);
+
+      const pctSpent = Math.min(100, Math.max(0, Math.round((actualExpensesPaise / monthlyBudgetPaise) * 100)));
+      if (dashBudgetProgressEl) {
+        dashBudgetProgressEl.style.width = `${pctSpent}%`;
+        if (actualExpensesPaise > monthlyBudgetPaise) {
+          dashBudgetProgressEl.style.backgroundColor = 'var(--color-danger, #ef4444)';
+        } else if (pctSpent >= 85) {
+          dashBudgetProgressEl.style.backgroundColor = 'var(--color-warning, #f59e0b)';
+        } else {
+          dashBudgetProgressEl.style.backgroundColor = 'var(--color-primary, #6366f1)';
+        }
+      }
+
+      if (dashBudgetRemainingEl) {
+        if (remainingBudgetPaise < 0) {
+          dashBudgetRemainingEl.textContent = `-${formatINR(Math.abs(remainingBudgetPaise))}`;
+          dashBudgetRemainingEl.style.color = 'var(--color-danger, #ef4444)';
+        } else {
+          dashBudgetRemainingEl.textContent = formatINR(remainingBudgetPaise);
+          dashBudgetRemainingEl.style.color = 'var(--color-text-main)';
+        }
+      }
+
+      if (dashBudgetStatusEl) {
+        dashBudgetStatusEl.style.display = 'inline-block';
+        if (actualExpensesPaise > monthlyBudgetPaise) {
+          dashBudgetStatusEl.className = 'status-badge budget_exceeded';
+          dashBudgetStatusEl.textContent = 'Exceeded';
+          dashBudgetStatusEl.style.backgroundColor = '#fee2e2';
+          dashBudgetStatusEl.style.color = '#b91c1c';
+        } else if (pctSpent >= 85) {
+          dashBudgetStatusEl.className = 'status-badge near_limit';
+          dashBudgetStatusEl.textContent = 'Near Limit';
+          dashBudgetStatusEl.style.backgroundColor = '#fef3c7';
+          dashBudgetStatusEl.style.color = '#b45309';
+        } else {
+          dashBudgetStatusEl.className = 'status-badge healthy';
+          dashBudgetStatusEl.textContent = 'Healthy';
+          dashBudgetStatusEl.style.backgroundColor = 'var(--color-mint, #d1fae5)';
+          dashBudgetStatusEl.style.color = 'var(--color-primary, #047857)';
+        }
+      }
+
+      if (dashBudgetSubtextEl) {
+        if (remainingBudgetPaise < 0) {
+          dashBudgetSubtextEl.textContent = `Over budget by ${formatINR(Math.abs(remainingBudgetPaise))}`;
+          dashBudgetSubtextEl.style.color = 'var(--color-danger, #ef4444)';
+        } else {
+          dashBudgetSubtextEl.textContent = `${pctSpent}% of budget used (${formatINR(remainingBudgetPaise)} left)`;
+          dashBudgetSubtextEl.style.color = 'var(--color-text-muted)';
+        }
+      }
+    } else {
+      if (dashBudgetTotalEl) dashBudgetTotalEl.textContent = 'No Budget Set';
+      if (dashBudgetSpentEl) dashBudgetSpentEl.textContent = formatINR(actualExpensesPaise);
+      if (dashBudgetRemainingEl) {
+        dashBudgetRemainingEl.textContent = '—';
+        dashBudgetRemainingEl.style.color = 'var(--color-text-muted)';
+      }
+      if (dashBudgetProgressEl) {
+        dashBudgetProgressEl.style.width = '0%';
+        dashBudgetProgressEl.style.backgroundColor = 'var(--color-primary, #6366f1)';
+      }
+      if (dashBudgetStatusEl) dashBudgetStatusEl.style.display = 'none';
+      if (dashBudgetSubtextEl) {
+        dashBudgetSubtextEl.textContent = 'Target spending cap';
+        dashBudgetSubtextEl.style.color = 'var(--color-text-muted)';
+      }
+    }
 
     // 50/30/20 Guideline metrics
     const metrics503020 = calculate503020Metrics({
@@ -386,16 +485,30 @@ async function loadBudgets() {
       budgetData = { budget: b, periodStats: { income_paise: 0, expense_paise: 0 } };
     }
 
-    const budget = budgetData.budget;
-    const input = document.getElementById('budget-total-input');
-    if (input && budget) {
-      input.value = paiseToRupees(budget.total_budget_paise);
+    const budget = budgetData?.budget || null;
+    const periodInput = document.getElementById('budget-period-input');
+    if (periodInput) {
+      periodInput.value = currentPeriod;
     }
 
-    const safeDaily = budgetData.safeDaily;
+    const totalInput = document.getElementById('budget-total-input');
+    if (totalInput) {
+      totalInput.value = budget ? paiseToRupees(budget.total_budget_paise) : '';
+    }
+
+    const needsInput = document.getElementById('budget-needs-pct-input');
+    const wantsInput = document.getElementById('budget-wants-pct-input');
+    const savingsInput = document.getElementById('budget-savings-pct-input');
+    if (needsInput) needsInput.value = budget ? budget.needs_target_pct : 50;
+    if (wantsInput) wantsInput.value = budget ? budget.wants_target_pct : 30;
+    if (savingsInput) savingsInput.value = budget ? budget.savings_target_pct : 20;
+
+    const safeDaily = budgetData?.safeDaily;
     if (safeDaily) {
-      document.getElementById('budget-safe-daily').textContent = formatINR(safeDaily.safeDailyPaise);
-      document.getElementById('budget-safe-msg').textContent = safeDaily.message;
+      const safeDailyEl = document.getElementById('budget-safe-daily');
+      const safeMsgEl = document.getElementById('budget-safe-msg');
+      if (safeDailyEl) safeDailyEl.textContent = formatINR(safeDaily.safeDailyPaise);
+      if (safeMsgEl) safeMsgEl.textContent = safeDaily.message;
     }
   } catch (err) {
     console.error('Failed to load budget:', err);
@@ -1054,28 +1167,103 @@ function setupEventHandlers() {
     });
   }
 
+  // Global Period Selector in Topbar
+  const globalPeriodSelect = document.getElementById('global-period-select');
+  if (globalPeriodSelect) {
+    globalPeriodSelect.value = currentPeriod;
+    globalPeriodSelect.addEventListener('change', async (e) => {
+      const selected = e.target.value;
+      if (selected && /^\d{4}-(0[1-9]|1[0-2])$/.test(selected)) {
+        currentPeriod = selected;
+        const budgetPeriodInput = document.getElementById('budget-period-input');
+        if (budgetPeriodInput) budgetPeriodInput.value = selected;
+        if (activeView === 'dashboard') await loadDashboard();
+        else if (activeView === 'budgets') await loadBudgets();
+        else if (activeView === 'transactions') await loadTransactions();
+      }
+    });
+  }
+
+  // Budget Period Picker in Budgets view
+  const budgetPeriodInput = document.getElementById('budget-period-input');
+  if (budgetPeriodInput) {
+    budgetPeriodInput.value = currentPeriod;
+    budgetPeriodInput.addEventListener('change', async (e) => {
+      const selected = e.target.value;
+      if (selected && /^\d{4}-(0[1-9]|1[0-2])$/.test(selected)) {
+        currentPeriod = selected;
+        if (globalPeriodSelect) globalPeriodSelect.value = selected;
+        await loadBudgets();
+      }
+    });
+  }
+
   // Save Budget Form
   const budgetForm = document.getElementById('form-set-budget');
   if (budgetForm) {
     budgetForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const periodInput = document.getElementById('budget-period-input');
+      const selectedPeriod = periodInput?.value || currentPeriod;
       const total_budget = document.getElementById('budget-total-input')?.value;
       const needs_target_pct = document.getElementById('budget-needs-pct-input')?.value || 50;
       const wants_target_pct = document.getElementById('budget-wants-pct-input')?.value || 30;
       const savings_target_pct = document.getElementById('budget-savings-pct-input')?.value || 20;
 
+      if (!selectedPeriod || !/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedPeriod)) {
+        showToast('Please select a valid month in YYYY-MM format.', 'error');
+        return;
+      }
+
+      if (total_budget === undefined || total_budget === '' || isNaN(Number(total_budget)) || Number(total_budget) < 0) {
+        showToast('Please enter a valid non-negative budget amount.', 'error');
+        return;
+      }
+
       try {
-        await api.budgets.save(currentPeriod, {
-          total_budget,
-          needs_target_pct,
-          wants_target_pct,
-          savings_target_pct
-        });
-        showToast('Monthly budget updated!', 'success');
-        loadBudgets();
-        loadDashboard();
+        currentPeriod = selectedPeriod;
+        if (globalPeriodSelect) globalPeriodSelect.value = selectedPeriod;
+
+        if (window.navigator.onLine) {
+          const res = await api.budgets.save(selectedPeriod, {
+            total_budget,
+            needs_target_pct,
+            wants_target_pct,
+            savings_target_pct
+          });
+          if (res?.budget) {
+            await saveLocalBudget(res.budget);
+          }
+        } else {
+          const offlineBudget = {
+            id: 'offline-' + Date.now(),
+            period: selectedPeriod,
+            total_budget_paise: rupeesToPaise(total_budget),
+            needs_target_pct: parseInt(needs_target_pct, 10),
+            wants_target_pct: parseInt(wants_target_pct, 10),
+            savings_target_pct: parseInt(savings_target_pct, 10),
+            version: 1,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          await saveLocalBudget(offlineBudget);
+          await queueOfflineAction({
+            action: 'PUT',
+            endpoint: `/api/budgets/${selectedPeriod}`,
+            payload: {
+              total_budget,
+              needs_target_pct,
+              wants_target_pct,
+              savings_target_pct
+            }
+          });
+        }
+
+        showToast(`Monthly budget for ${selectedPeriod} saved successfully!`, 'success');
+        await loadBudgets();
+        await loadDashboard();
       } catch (err) {
-        showToast(err.message, 'error');
+        showToast(err.message || 'Failed to save budget.', 'error');
       }
     });
   }

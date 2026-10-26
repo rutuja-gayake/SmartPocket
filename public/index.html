@@ -74,6 +74,12 @@
           <h1 class="view-heading" id="topbar-title">Financial Dashboard</h1>
         </div>
         <div class="topbar-right">
+          <!-- Month/Period Selector -->
+          <div style="display:flex; align-items:center; gap:6px;">
+            <label for="global-period-select" style="font-size:0.8rem; color:var(--color-text-muted); font-weight:600;">Month:</label>
+            <input type="month" id="global-period-select" class="form-control" style="padding:4px 8px; font-size:0.85rem; height:34px; width:auto; cursor:pointer;" title="Select Month/Year for Dashboard & Transactions">
+          </div>
+
           <!-- Offline / Synchronization Indicator Pill -->
           <div id="sync-status-pill" class="sync-pill" onclick="window.SmartPocket.triggerManualSync()" title="Click to synchronize changes">
             <span class="sync-dot"></span>
@@ -215,10 +221,22 @@
               <div class="card-value" id="dash-savings-total" style="color:#059669;">₹0.00</div>
               <div class="card-subtext">Reserved in savings goals</div>
             </div>
-            <div class="card">
-              <div class="card-title">Monthly Budget Cap</div>
+            <div class="card" id="dash-budget-card">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div class="card-title">Monthly Budget Cap</div>
+                <span id="dash-budget-status" class="status-badge healthy" style="display:none; font-size:0.75rem;">Healthy</span>
+              </div>
               <div class="card-value" id="dash-budget-total">₹0.00</div>
-              <div class="card-subtext">Target spending cap</div>
+              <div style="margin: 8px 0;">
+                <div style="background-color: var(--color-surface-subtle); border-radius: var(--radius-full); height: 8px; overflow: hidden; width: 100%;">
+                  <div id="dash-budget-progress-bar" style="background-color: var(--color-primary); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
+                </div>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:0.82rem; margin-top: 4px;">
+                <span style="color:var(--color-text-muted);">Spent: <strong id="dash-budget-spent" style="color:var(--color-text-main);">₹0.00</strong></span>
+                <span style="color:var(--color-text-muted);">Remaining: <strong id="dash-budget-remaining" style="color:var(--color-text-main);">₹0.00</strong></span>
+              </div>
+              <div class="card-subtext" id="dash-budget-subtext" style="margin-top:4px;">Target spending cap</div>
             </div>
           </div>
 
@@ -358,6 +376,11 @@
 
             <form id="form-set-budget">
               <div class="form-group">
+                <label class="form-label" for="budget-period-input">Budget Month (YYYY-MM)</label>
+                <input type="month" id="budget-period-input" class="form-control" required>
+              </div>
+
+              <div class="form-group">
                 <label class="form-label" for="budget-total-input">Total Monthly Spending Budget (₹)</label>
                 <input type="number" step="1" id="budget-total-input" class="form-control" placeholder="e.g. 8000" required>
               </div>
@@ -377,7 +400,10 @@
                 </div>
               </div>
 
-              <button type="submit" class="btn btn-primary" style="margin-top: 12px;">Save Monthly Budget</button>
+              <div style="display:flex; gap:12px; align-items:center; margin-top: 16px;">
+                <button type="submit" class="btn btn-primary">Save Monthly Budget</button>
+                <button type="button" class="btn btn-secondary" onclick="window.SmartPocket.navigateTo('dashboard')">View on Dashboard</button>
+              </div>
             </form>
           </div>
 

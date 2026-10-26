@@ -69,6 +69,11 @@ export function calculateAvailableBalance({
   return totalAvailableFunds - totalExpensePaise - netSavingsTransfersPaise;
 }
 
+export function calculateRemainingBudget(monthlyBudgetPaise, currentMonthExpensePaise) {
+  if (monthlyBudgetPaise <= 0) return 0;
+  return monthlyBudgetPaise - currentMonthExpensePaise;
+}
+
 export function calculateSafeDailySpending({
   availableBalancePaise = 0,
   monthlyBudgetPaise = 0,
