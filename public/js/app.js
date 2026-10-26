@@ -40,7 +40,8 @@ let pending2faTempToken = null;
 export function navigateTo(viewName) {
   const user = getCurrentUser();
   if (!user && viewName !== 'auth' && viewName !== 'welcome') {
-    viewName = 'welcome';
+    showToast('Please sign in to access your finances.', 'info');
+    viewName = 'auth';
   }
 
   activeView = viewName;
@@ -440,16 +441,87 @@ function escapeHtml(str) {
 }
 
 /**
+ * Switch Auth Tabs (Sign In vs Register)
+ */
+export function showAuthTab(tab) {
+  const formLogin = document.getElementById('form-login');
+  const formRegister = document.getElementById('form-register');
+  const tabLogin = document.getElementById('tab-login');
+  const tabRegister = document.getElementById('tab-register');
+
+  if (tab === 'login') {
+    if (formLogin) formLogin.style.display = 'block';
+    if (formRegister) formRegister.style.display = 'none';
+    if (tabLogin) {
+      tabLogin.style.borderBottom = '2px solid var(--color-primary)';
+      tabLogin.style.fontWeight = '600';
+    }
+    if (tabRegister) {
+      tabRegister.style.borderBottom = 'none';
+      tabRegister.style.fontWeight = 'normal';
+    }
+  } else {
+    if (formLogin) formLogin.style.display = 'none';
+    if (formRegister) formRegister.style.display = 'block';
+    if (tabLogin) {
+      tabLogin.style.borderBottom = 'none';
+      tabLogin.style.fontWeight = 'normal';
+    }
+    if (tabRegister) {
+      tabRegister.style.borderBottom = '2px solid var(--color-primary)';
+      tabRegister.style.fontWeight = '600';
+    }
+  }
+}
+window.showAuthTab = showAuthTab;
+
+/**
+ * 1-Click Demo Login Helper
+ */
+export async function loginDemoUser() {
+  try {
+    showToast('Signing in with demo student account...', 'info');
+    const res = await api.auth.login({
+      email: 'student@example.edu',
+      password: 'Password123!'
+    });
+    setCurrentUser(res.user);
+    updateUserBadges(res.user);
+    showToast('Welcome, Aarav! (Demo Account Active)', 'success');
+    navigateTo('dashboard');
+  } catch (err) {
+    showToast('Demo sign-in failed: ' + err.message, 'error');
+  }
+}
+window.loginDemoUser = loginDemoUser;
+
+/**
  * Global App API exposed on window.SmartPocket for inline event handlers
  */
 window.SmartPocket = {
   navigateTo,
+  showAuthTab,
+  loginDemoUser,
   openAddTransactionModal: () => {
+    const user = getCurrentUser();
+    if (!user) {
+      showToast('Please sign in to add transactions.', 'info');
+      navigateTo('auth');
+      return;
+    }
     populateCategoryDropdown();
     document.getElementById('tx-date').value = new Date().toISOString().slice(0, 10);
     openModal('modal-add-tx');
   },
-  openAddGoalModal: () => openModal('modal-add-goal'),
+  openAddGoalModal: () => {
+    const user = getCurrentUser();
+    if (!user) {
+      showToast('Please sign in to manage savings goals.', 'info');
+      navigateTo('auth');
+      return;
+    }
+    openModal('modal-add-goal');
+  },
   openGoalMovementModal: (goalId, type) => {
     document.getElementById('movement-goal-id').value = goalId;
     document.getElementById('movement-type').value = type;
@@ -534,6 +606,39 @@ function setupEventHandlers() {
       navigateTo(el.dataset.view);
     });
   });
+
+  // Auth tab switchers
+  const tabLogin = document.getElementById('tab-login');
+  if (tabLogin) {
+    tabLogin.addEventListener('click', (e) => {
+      e.preventDefault();
+      showAuthTab('login');
+    });
+  }
+  const tabRegister = document.getElementById('tab-register');
+  if (tabRegister) {
+    tabRegister.addEventListener('click', (e) => {
+      e.preventDefault();
+      showAuthTab('register');
+    });
+  }
+
+  // Quick Demo Login buttons
+  document.querySelectorAll('.btn-demo-login').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      loginDemoUser();
+    });
+  });
+
+  // Topbar + Add Transaction button
+  const topbarAddBtn = document.getElementById('topbar-btn-add-tx');
+  if (topbarAddBtn) {
+    topbarAddBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.SmartPocket.openAddTransactionModal();
+    });
+  }
 
   // Modal Closers
   document.querySelectorAll('.modal-close, [data-modal-close]').forEach(btn => {

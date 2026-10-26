@@ -80,13 +80,13 @@
             <span id="sync-status-label">Online • Synced</span>
           </div>
 
-          <button class="btn btn-primary btn-sm" onclick="window.SmartPocket.openAddTransactionModal()">+ Add Transaction</button>
+          <button id="topbar-btn-add-tx" class="btn btn-primary btn-sm" onclick="window.SmartPocket.openAddTransactionModal()">+ Add Transaction</button>
         </div>
       </header>
 
       <main class="content-body">
         <!-- VIEW: WELCOME & ONBOARDING -->
-        <section id="view-welcome" class="view-section">
+        <section id="view-welcome" class="view-section active">
           <div style="max-width: 720px; margin: 40px auto; text-align: center;">
             <img src="/assets/icons/icon.svg" alt="SmartPocket" style="width: 72px; height: 72px; margin-bottom: 24px; border-radius: 16px;">
             <h2 style="font-size: 2.25rem; font-weight: 800; color: var(--color-primary); margin-bottom: 16px;">Pocket Money & Savings, Solved.</h2>
@@ -109,8 +109,9 @@
               </div>
             </div>
 
-            <div style="display: flex; justify-content: center; gap: 16px;">
-              <button class="btn btn-primary" data-view="auth">Get Started / Sign In</button>
+            <div style="display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
+              <button class="btn btn-primary" data-view="auth">Sign In / Register</button>
+              <button class="btn btn-secondary btn-demo-login" onclick="window.SmartPocket.loginDemoUser()">⚡ Quick Demo Sign In (1-Click)</button>
             </div>
           </div>
         </section>
@@ -124,8 +125,8 @@
 
               <!-- Tabs -->
               <div style="display: flex; border-bottom: 1px solid var(--color-border); margin-bottom: 20px;">
-                <button id="tab-login" class="btn btn-secondary" style="flex:1; border-radius:0; border:none; border-bottom: 2px solid var(--color-primary);" onclick="showAuthTab('login')">Sign In</button>
-                <button id="tab-register" class="btn btn-secondary" style="flex:1; border-radius:0; border:none;" onclick="showAuthTab('register')">Register</button>
+                <button id="tab-login" class="btn btn-secondary" style="flex:1; border-radius:0; border:none; border-bottom: 2px solid var(--color-primary); font-weight:600;">Sign In</button>
+                <button id="tab-register" class="btn btn-secondary" style="flex:1; border-radius:0; border:none;">Register</button>
               </div>
 
               <!-- Login Form -->
@@ -139,6 +140,12 @@
                   <input type="password" id="login-password" class="form-control" required placeholder="••••••••">
                 </div>
                 <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">Sign In</button>
+
+                <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border); text-align: center;">
+                  <button type="button" class="btn btn-secondary btn-sm btn-demo-login" onclick="window.SmartPocket.loginDemoUser()" style="width: 100%;">
+                    ⚡ 1-Click Demo Login (student@example.edu)
+                  </button>
+                </div>
               </form>
 
               <!-- Register Form -->
@@ -596,22 +603,6 @@
       <button class="btn btn-primary" style="width:100%; margin-top: 16px;" data-modal-close>I Have Saved My Recovery Codes</button>
     </div>
   </div>
-
-  <script>
-    function showAuthTab(tab) {
-      if (tab === 'login') {
-        document.getElementById('form-login').style.display = 'block';
-        document.getElementById('form-register').style.display = 'none';
-        document.getElementById('tab-login').style.borderBottom = '2px solid var(--color-primary)';
-        document.getElementById('tab-register').style.borderBottom = 'none';
-      } else {
-        document.getElementById('form-login').style.display = 'none';
-        document.getElementById('form-register').style.display = 'block';
-        document.getElementById('tab-login').style.borderBottom = 'none';
-        document.getElementById('tab-register').style.borderBottom = '2px solid var(--color-primary)';
-      }
-    }
-  </script>
 
   <!-- Main ES Module Application Entrypoint -->
   <script type="module" src="/js/app.js"></script>

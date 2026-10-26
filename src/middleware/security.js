@@ -18,10 +18,10 @@ export function setSecurityHeaders(req, res, next) {
   // Permissions Policy
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
-  // Content Security Policy: allows inline styles and data: images for QR codes and local scripts
+  // Content Security Policy: allows inline styles and scripts for local UI controls, plus data: images for QR codes
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; manifest-src 'self';"
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; manifest-src 'self';"
   );
 
   next();
