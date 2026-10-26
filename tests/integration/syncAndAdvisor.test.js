@@ -65,33 +65,33 @@ test('Integration - Sync Push/Pull and Pocket AI Advisor', async (t) => {
       }
     });
 
-    // Query 1: Daily limit
+    // Query 1: Daily limit (explicit offline mode)
     const dailyRes = await env.request('/api/advisor/query', {
       method: 'POST',
       headers: { Cookie: cookie },
-      body: { query: 'How much can I spend today?' }
+      body: { query: 'How much can I spend today?', preferCloud: false }
     });
     assert.equal(dailyRes.status, 200);
     const dailyData = await dailyRes.json();
     assert.equal(dailyData.mode, 'offline');
     assert.ok(dailyData.answer.includes('safe daily spending allowance'));
 
-    // Query 2: Affordability check
+    // Query 2: Affordability check (explicit offline mode)
     const affordRes = await env.request('/api/advisor/query', {
       method: 'POST',
       headers: { Cookie: cookie },
-      body: { query: 'Can I afford ₹800 shoes?' }
+      body: { query: 'Can I afford ₹800 shoes?', preferCloud: false }
     });
     assert.equal(affordRes.status, 200);
     const affordData = await affordRes.json();
     assert.equal(affordData.mode, 'offline');
     assert.ok(affordData.answer.includes('Yes') || affordData.answer.includes('afford'));
 
-    // Query 3: Wants ratio
+    // Query 3: Wants ratio (explicit offline mode)
     const wantsRes = await env.request('/api/advisor/query', {
       method: 'POST',
       headers: { Cookie: cookie },
-      body: { query: 'Am I spending too much on wants?' }
+      body: { query: 'Am I spending too much on wants?', preferCloud: false }
     });
     assert.equal(wantsRes.status, 200);
     const wantsData = await wantsRes.json();

@@ -213,9 +213,38 @@ async function loadDashboard() {
       catTotals
     );
 
+    // Load Real Groq AI Predictions & Insights
+    loadAiPredictions();
+
   } catch (err) {
     console.error('Failed to load dashboard:', err);
     showToast('Failed to load dashboard data.', 'error');
+  }
+}
+
+/**
+ * Loads real AI financial predictions and recommendations from Groq
+ */
+async function loadAiPredictions() {
+  const predEl = document.getElementById('dash-ai-prediction');
+  const alertEl = document.getElementById('dash-ai-alert');
+  const tipEl = document.getElementById('dash-ai-tip');
+  const badgeEl = document.getElementById('ai-provider-badge');
+
+  if (!predEl) return;
+
+  try {
+    const res = await api.advisor.predictions();
+    if (res) {
+      if (predEl && res.prediction) predEl.textContent = res.prediction;
+      if (alertEl && res.alert) alertEl.textContent = res.alert;
+      if (tipEl && res.tip) tipEl.textContent = res.tip;
+      if (badgeEl) {
+        badgeEl.textContent = res.mode === 'cloud' ? `Live ${res.provider?.toUpperCase()} AI` : 'Offline AI Engine';
+      }
+    }
+  } catch (err) {
+    console.warn('AI predictions load error:', err);
   }
 }
 
@@ -407,18 +436,17 @@ async function askAdvisor(queryText) {
   // Append thinking bubble
   const assistantBubble = document.createElement('div');
   assistantBubble.className = 'chat-bubble assistant';
-  assistantBubble.textContent = 'Analyzing your pocket finances...';
+  assistantBubble.textContent = 'Consulting Groq AI with your real financial ledger...';
   messagesContainer.appendChild(assistantBubble);
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
   try {
-    const preferCloud = document.getElementById('advisor-cloud-toggle')?.checked || false;
-    const res = await api.advisor.query({ query, preferCloud });
+    const res = await api.advisor.query({ query, preferCloud: true });
 
     assistantBubble.innerHTML = `
       <div>${escapeHtml(res.answer)}</div>
       <div style="margin-top: 6px; font-size: 0.72rem; color: var(--color-text-muted);">
-        Mode: ${res.mode === 'cloud' ? `☁️ Cloud AI (${res.provider})` : '🔒 Offline Deterministic Engine'}
+        Mode: ${res.mode === 'cloud' ? `☁️ Real Groq AI (${res.provider?.toUpperCase() || 'GROQ'})` : '🔒 Offline Engine'}
       </div>
     `;
   } catch (err) {
@@ -569,7 +597,8 @@ window.SmartPocket = {
       showToast('Sync failed. Changes remain securely stored offline.', 'error');
     }
   },
-  askAdvisor
+  askAdvisor,
+  refreshAiPredictions: loadAiPredictions
 };
 
 /**
@@ -845,10 +874,10 @@ function setupEventHandlers() {
   if (budgetForm) {
     budgetForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const total_budget = document.getElementById('budget-total-input').value;
-      const needs_target_pct = document.getElementById('budget-needs-pct-input').value || 50;
-      const wants_target_pct = document.getElementById('budget-wants-pct-input').value || 30;
-      const savings_target_pct = document.getElementById('budget-savings-pct-input').value || 20;
+      const total_budget = document.getElementById('budget-total-input')?.value;
+      const needs_target_pct = document.getElementById('budget-needs-pct-input')?.value || 50;
+      const wants_target_pct = document.getElementById('budget-wants-pct-input')?.value || 30;
+      const savings_target_pct = document.getElementById('budget-savings-pct-input')?.value || 20;
 
       try {
         await api.budgets.save(currentPeriod, {
@@ -1006,5 +1035,9 @@ async function initApp() {
   }
 }
 
-window.addEventListener('DOMContentLoaded', initApp);
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
 

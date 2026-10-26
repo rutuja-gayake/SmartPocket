@@ -226,8 +226,7 @@ export function processOfflineQuery(query, financialContext) {
 }
 
 /**
- * Optional Cloud AI integration (Gemini / OpenAI API).
- * Only called if user has configured AI_PROVIDER and AI_API_KEY.
+ * Real Cloud AI integration (Groq / Gemini / OpenAI API).
  * Context is strictly anonymized: no names, emails, or personal transaction notes are sent.
  */
 export async function queryCloudAi(prompt, financialSummary) {
@@ -235,18 +234,30 @@ export async function queryCloudAi(prompt, financialSummary) {
     throw new Error('Cloud AI provider is not configured. Using offline advisor.');
   }
 
+  const categoriesText = (financialSummary.categoryBreakdown || [])
+    .slice(0, 6)
+    .map(c => `${c.category_name} (${c.classification}): ₹${paiseToRupees(c.total_paise).toFixed(0)} across ${c.count} tx`)
+    .join(', ');
+
+  const goalsText = (financialSummary.goals || [])
+    .slice(0, 3)
+    .map(g => `${g.title}: ₹${paiseToRupees(g.current_saved_paise).toFixed(0)} saved of ₹${paiseToRupees(g.target_amount_paise).toFixed(0)} target`)
+    .join(', ');
+
   const systemInstructions = `
 You are the SmartPocket Financial Assistant for college students in India.
-Give concise, friendly, practical advice in INR (₹).
-Never guarantee financial outcomes. Never invent account balances.
-Rely strictly on the provided anonymized financial numbers:
-- Spendable Balance: ₹${paiseToRupees(financialSummary.availableBalancePaise).toFixed(2)}
-- Safe Daily Spending: ₹${paiseToRupees(financialSummary.safeDailyPaise).toFixed(2)}
+Give concise, realistic, friendly, practical advice in Indian Rupees (₹).
+Never guarantee financial returns. Never invent account balances.
+Rely strictly on this student's real financial ledger:
+- Current Spendable Pocket Cash: ₹${paiseToRupees(financialSummary.availableBalancePaise).toFixed(2)}
+- Safe Daily Spending Pace: ₹${paiseToRupees(financialSummary.safeDailyPaise).toFixed(2)}/day
 - Remaining Days in Month: ${financialSummary.remainingDays}
-- Needs Spent: ₹${paiseToRupees(financialSummary.needsPaise).toFixed(2)}
-- Wants Spent: ₹${paiseToRupees(financialSummary.wantsPaise).toFixed(2)}
+- Essential Needs Spent: ₹${paiseToRupees(financialSummary.needsPaise).toFixed(2)}
+- Discretionary Wants Spent: ₹${paiseToRupees(financialSummary.wantsPaise).toFixed(2)}
 - Remaining Monthly Budget: ₹${paiseToRupees(financialSummary.remainingBudgetPaise).toFixed(2)}
-Keep replies under 3-4 sentences.
+${categoriesText ? `- Top Expense Categories: ${categoriesText}` : ''}
+${goalsText ? `- Active Savings Goals: ${goalsText}` : ''}
+Keep your answer clear, helpful for a student, grounded in their real numbers, and under 3-4 sentences.
 `;
 
   if (config.ai.provider === 'groq' || config.ai.provider === 'openai') {
@@ -254,7 +265,7 @@ Keep replies under 3-4 sentences.
       ? 'https://api.groq.com/openai/v1/chat/completions'
       : 'https://api.openai.com/v1/chat/completions';
 
-    const defaultModel = config.ai.provider === 'groq' ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini';
+    const defaultModel = config.ai.provider === 'groq' ? 'openai/gpt-oss-120b' : 'gpt-4o-mini';
     const model = config.ai.model || defaultModel;
 
     const response = await fetch(endpoint, {
@@ -310,5 +321,97 @@ Keep replies under 3-4 sentences.
   }
 
   throw new Error(`Unsupported AI provider: ${config.ai.provider}`);
+}
+
+/**
+ * Generates real AI predictions and recommendations using Groq / Cloud AI.
+ * Falls back to deterministic calculations if offline or cloud unconfigured.
+ */
+export async function generateAiRecommendations(financialSummary) {
+  if (config.ai.provider !== 'none' && config.ai.apiKey) {
+    try {
+      const categoriesText = (financialSummary.categoryBreakdown || [])
+        .slice(0, 5)
+        .map(c => `${c.category_name}: ₹${paiseToRupees(c.total_paise).toFixed(0)}`)
+        .join(', ');
+
+      const prompt = `Based on this student's real numbers:
+- Spendable Balance: ₹${paiseToRupees(financialSummary.availableBalancePaise).toFixed(2)}
+- Safe Daily Limit: ₹${paiseToRupees(financialSummary.safeDailyPaise).toFixed(2)}/day
+- Remaining Days: ${financialSummary.remainingDays}
+- Spending Categories: ${categoriesText || 'None recorded yet'}
+- Needs Spent: ₹${paiseToRupees(financialSummary.needsPaise).toFixed(2)}
+- Wants Spent: ₹${paiseToRupees(financialSummary.wantsPaise).toFixed(2)}
+- Monthly Budget: ₹${paiseToRupees(financialSummary.monthlyBudgetPaise).toFixed(2)}
+
+Provide real, practical predictions and advice in valid JSON format with three exact keys:
+1. "prediction": Concrete forecast of their financial position at month-end based on current spending rate.
+2. "alert": Honest alert on their highest spending area or potential budget breach.
+3. "tip": High-impact, realistic student saving tip to stay within their safe daily allowance.
+Keep each value 1-2 concise sentences.`;
+
+      const endpoint = config.ai.provider === 'groq'
+        ? 'https://api.groq.com/openai/v1/chat/completions'
+        : 'https://api.openai.com/v1/chat/completions';
+
+      const model = config.ai.model || 'openai/gpt-oss-120b';
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.ai.apiKey.trim()}`
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are SmartPocket AI. Return only a valid JSON object with keys: prediction, alert, tip.' },
+            { role: 'user', content: prompt }
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.5,
+          max_tokens: 800
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          const parsed = JSON.parse(content);
+          return {
+            prediction: parsed.prediction,
+            alert: parsed.alert,
+            tip: parsed.tip,
+            mode: 'cloud',
+            provider: config.ai.provider
+          };
+        }
+      } else {
+        const errBody = await response.text();
+        console.warn('Groq recommendation HTTP error:', response.status, errBody);
+      }
+    } catch (err) {
+      console.warn('Real AI recommendation generation error, using fallback:', err.message);
+    }
+  }
+
+  // Deterministic calculation fallback
+  const topCat = financialSummary.categoryBreakdown?.[0];
+  const safeDaily = paiseToRupees(financialSummary.safeDailyPaise);
+  const balance = paiseToRupees(financialSummary.availableBalancePaise);
+  const remainingDays = financialSummary.remainingDays;
+
+  return {
+    prediction: balance > 0
+      ? `At your safe daily spending pace of ₹${safeDaily.toFixed(0)}/day, you will finish the month with ₹${balance.toFixed(0)} safely covering the remaining ${remainingDays} days.`
+      : 'Your spendable balance is zero. Any additional non-essential spending will create a financial deficit.',
+    alert: topCat
+      ? `Your largest expense is ${topCat.category_name} (₹${paiseToRupees(topCat.total_paise).toFixed(0)} across ${topCat.count} transactions). Keep discretionary spending controlled.`
+      : 'No high-risk spending detected yet this month.',
+    tip: `Keep each day\'s spending strictly under ₹${safeDaily.toFixed(0)} to preserve your pocket money through month-end.`,
+    mode: 'offline',
+    provider: 'local'
+  };
 }
 

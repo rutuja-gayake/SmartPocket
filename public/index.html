@@ -242,6 +242,31 @@
             </div>
           </div>
 
+          <!-- Real AI Financial Predictions & Recommendations Card -->
+          <div class="card" style="margin-bottom: var(--space-lg); border-left: 4px solid var(--color-primary); background: linear-gradient(to right, #F8FBF8, #FFFFFF);">
+            <div class="card-title">
+              <span style="display:flex; align-items:center; gap:8px;">
+                <span>🤖 Groq AI Financial Predictions & Advice</span>
+                <span class="status-badge healthy" id="ai-provider-badge" style="font-size:0.7rem;">Live Groq Cloud AI</span>
+              </span>
+              <button class="btn btn-secondary btn-sm" onclick="window.SmartPocket.refreshAiPredictions()">↻ Refresh Insights</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 12px;">
+              <div style="background:var(--color-surface); padding:14px; border-radius:var(--radius-md); border:1px solid var(--color-border);">
+                <div style="font-size:0.8rem; font-weight:600; color:var(--color-primary); margin-bottom:4px;">📊 Month-End Forecast</div>
+                <div style="font-size:0.88rem; color:var(--color-text-main); line-height:1.4;" id="dash-ai-prediction">Analyzing spending velocity with Groq...</div>
+              </div>
+              <div style="background:var(--color-surface); padding:14px; border-radius:var(--radius-md); border:1px solid var(--color-border);">
+                <div style="font-size:0.8rem; font-weight:600; color:#B45309; margin-bottom:4px;">⚠️ Spending Alert</div>
+                <div style="font-size:0.88rem; color:var(--color-text-main); line-height:1.4;" id="dash-ai-alert">Auditing category spending with Groq...</div>
+              </div>
+              <div style="background:var(--color-surface); padding:14px; border-radius:var(--radius-md); border:1px solid var(--color-border);">
+                <div style="font-size:0.8rem; font-weight:600; color:var(--color-savings); margin-bottom:4px;">💡 Actionable Student Tip</div>
+                <div style="font-size:0.88rem; color:var(--color-text-main); line-height:1.4;" id="dash-ai-tip">Generating personalized saving tip with Groq...</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Charts Grid -->
           <div class="grid-cards-2">
             <div class="card">
@@ -332,7 +357,7 @@
                 <input type="number" step="1" id="budget-total-input" class="form-control" placeholder="e.g. 8000" required>
               </div>
 
-              <div class="form-row">
+              <div class="form-row" style="grid-template-columns: 1fr 1fr 1fr;">
                 <div class="form-group">
                   <label class="form-label" for="budget-needs-pct-input">Needs Target (%)</label>
                   <input type="number" id="budget-needs-pct-input" class="form-control" value="50">
@@ -340,6 +365,10 @@
                 <div class="form-group">
                   <label class="form-label" for="budget-wants-pct-input">Wants Target (%)</label>
                   <input type="number" id="budget-wants-pct-input" class="form-control" value="30">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="budget-savings-pct-input">Savings Target (%)</label>
+                  <input type="number" id="budget-savings-pct-input" class="form-control" value="20">
                 </div>
               </div>
 
@@ -380,10 +409,9 @@
               <h2 style="font-size: 1.3rem;">Pocket AI Advisor</h2>
               <p style="font-size: 0.85rem;">Instant financial guidance tailored to your pocket money & budget.</p>
             </div>
-            <label style="display:flex; align-items:center; gap: 8px; font-size: 0.82rem; color: var(--color-text-muted); cursor: pointer;">
-              <input type="checkbox" id="advisor-cloud-toggle">
-              Use Cloud AI (if configured)
-            </label>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span class="status-badge healthy" style="font-size:0.75rem;">⚡ Real Groq Cloud AI Active</span>
+            </div>
           </div>
 
           <div class="advisor-chat-container">

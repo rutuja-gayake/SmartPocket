@@ -80,7 +80,8 @@ export const api = {
 
   // Advisor
   advisor: {
-    query: (payload) => api.request('/api/advisor/query', { method: 'POST', body: payload })
+    query: (payload) => api.request('/api/advisor/query', { method: 'POST', body: payload }),
+    predictions: () => api.request('/api/advisor/predictions')
   },
 
   // Sync

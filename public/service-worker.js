@@ -1,14 +1,14 @@
 /**
  * SmartPocket Service Worker
- * Version: smartpocket-v1
+ * Version: smartpocket-shell-v2
  *
  * Strategies:
- * - App Shell & static assets: Cache-first with network fallback.
- * - API requests (/api/*): Network-only; offline storage is managed by IndexedDB (smartpocket_idb)
- *   to avoid caching private session or credential data in shared HTTP caches.
+ * - Network-First for HTML & JS: Always fetches the freshest code when online,
+ *   while seamlessly falling back to cached shell when offline.
+ * - API requests (/api/*): Passed straight to network (offline handling via IndexedDB).
  */
 
-const CACHE_NAME = 'smartpocket-shell-v1';
+const CACHE_NAME = 'smartpocket-shell-v2';
 
 const STATIC_ASSETS = [
   '/',
@@ -29,10 +29,11 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
@@ -58,26 +59,28 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first strategy for app shell & static assets
+  // Network-First with Cache Fallback for dynamic updates
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Fetch in background to update cache (stale-while-revalidate)
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
-
-      return fetch(event.request).catch(() => {
-        // Offline fallback for navigation
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
         }
-      });
-    })
+        return networkResponse;
+      })
+      .catch(() => {
+        // When offline, serve from cache
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html');
+          }
+        });
+      })
   );
 });
-
