@@ -95,8 +95,12 @@ export function validateMovementPayload(body) {
     errors.push('Amount must be a positive number greater than zero.');
   } else {
     const num = Number(amount);
-    if (Math.floor(num * 100) !== Math.round(num * 100)) {
-      errors.push('Amount cannot have more than 2 decimal places.');
+    const str = String(amount).trim();
+    if (str.includes('.')) {
+      const decimals = str.split('.')[1];
+      if (decimals && decimals.length > 2) {
+        errors.push('Amount cannot have more than 2 decimal places.');
+      }
     }
     if (num > 10000000) {
       errors.push('Amount exceeds maximum allowed limit.');

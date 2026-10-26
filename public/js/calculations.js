@@ -210,6 +210,13 @@ export function calculateGoalProgress(goal, currentDate = new Date()) {
     }
   }
 
-  return { progressPct, remainingPaise, isCompleted, suggestedWeeklyPaise };
+  const milestones = {
+    m25: progressPct >= 25,
+    m50: progressPct >= 50,
+    m75: progressPct >= 75,
+    m100: progressPct >= 100
+  };
+
+  return { progressPct, remainingPaise, isCompleted, milestones, suggestedWeeklyPaise };
 }
 

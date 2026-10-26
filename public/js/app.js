@@ -33,6 +33,7 @@ import { showToast, openModal, closeModal, getStatusBadgeHtml } from './ui.js';
 let activeView = 'dashboard';
 let currentPeriod = getCurrentPeriod();
 let cachedCategories = [];
+let cachedGoals = [];
 let pending2faTempToken = null;
 
 /**
@@ -102,11 +103,16 @@ async function loadDashboard() {
       budgetRes = bRes;
       budget = budgetRes?.budget || null;
       goals = goalsRes.goals || [];
+      cachedGoals = goals;
+      for (const g of goals) {
+        saveLocalGoal(g).catch(() => {});
+      }
     } else {
       const allLocal = await getAllLocalTransactions();
       txs = allLocal.filter(t => t.date.startsWith(currentPeriod));
       budget = await getLocalBudget(currentPeriod);
       goals = await getAllLocalGoals();
+      cachedGoals = goals;
     }
 
     // Synchronize global period selector if present
@@ -360,6 +366,9 @@ async function loadDashboard() {
       catTotals
     );
 
+    // Render Active Goals on Dashboard
+    renderDashboardGoals(goals);
+
     // Load Real Groq AI Predictions & Insights
     loadAiPredictions();
 
@@ -516,6 +525,125 @@ async function loadBudgets() {
 }
 
 /**
+ * Renders Active Goals Overview on Dashboard
+ */
+function renderDashboardGoals(goals) {
+  const dashGoalsEl = document.getElementById('dash-goals-container');
+  if (!dashGoalsEl) return;
+
+  const activeGoals = (goals || []).filter(g => g.status !== 'completed');
+  if (activeGoals.length === 0) {
+    dashGoalsEl.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 24px; color: var(--color-text-muted); background: var(--color-surface-subtle); border-radius: var(--radius-md);">
+        <p style="margin-bottom: 8px;">No active savings goals yet. Save pocket money for textbooks, laptops, or college events!</p>
+        <button class="btn btn-primary btn-sm" onclick="window.SmartPocket.openAddGoalModal()">+ Create a Savings Goal</button>
+      </div>
+    `;
+    return;
+  }
+
+  dashGoalsEl.innerHTML = activeGoals.map(g => {
+    const analysis = g.analysis || calculateGoalProgress(g, new Date());
+    const pct = analysis.progressPct;
+    const remaining = analysis.remainingPaise;
+    return `
+      <div style="background: var(--color-surface-subtle); border-radius: var(--radius-md); padding: 16px; border: 1px solid var(--color-border);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+          <strong style="color:var(--color-primary); font-size:1rem;">${escapeHtml(g.title)}</strong>
+          <span class="status-badge healthy" style="font-size:0.75rem;">${pct}%</span>
+        </div>
+        <div style="font-size:0.82rem; color:var(--color-text-muted); margin-bottom: 6px;">
+          Target: ${formatINR(g.target_amount_paise)} ${g.target_date ? `• By ${g.target_date}` : ''}
+        </div>
+
+        <!-- Progress Bar -->
+        <div style="background-color: var(--color-mint); border-radius: var(--radius-full); height: 8px; overflow: hidden; margin-bottom: 6px;">
+          <div style="background-color: var(--color-savings); height: 100%; width: ${pct}%; transition: width 0.4s ease;"></div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom: 8px;">
+          <span>Saved: <strong style="color:var(--color-primary);">${formatINR(g.current_saved_paise)}</strong></span>
+          <span style="color:var(--color-text-muted);">Remaining: <strong>${formatINR(remaining)}</strong></span>
+        </div>
+
+        <!-- Milestones -->
+        <div style="display:flex; gap:4px; font-size:0.7rem; margin-bottom: 10px;">
+          <span style="padding:2px 6px; border-radius:4px; background:${pct >= 25 ? 'var(--color-mint)' : '#eee'}; color:${pct >= 25 ? 'var(--color-savings)' : '#888'}; font-weight:600;">25%</span>
+          <span style="padding:2px 6px; border-radius:4px; background:${pct >= 50 ? 'var(--color-mint)' : '#eee'}; color:${pct >= 50 ? 'var(--color-savings)' : '#888'}; font-weight:600;">50%</span>
+          <span style="padding:2px 6px; border-radius:4px; background:${pct >= 75 ? 'var(--color-mint)' : '#eee'}; color:${pct >= 75 ? 'var(--color-savings)' : '#888'}; font-weight:600;">75%</span>
+          <span style="padding:2px 6px; border-radius:4px; background:${pct >= 100 ? 'var(--color-mint)' : '#eee'}; color:${pct >= 100 ? 'var(--color-savings)' : '#888'}; font-weight:600;">100%</span>
+        </div>
+
+        ${analysis.suggestedWeeklyPaise ? `<p style="font-size:0.78rem; color:var(--color-primary); margin-bottom: 10px;">💡 Suggested pace: Save <strong>${formatINR(analysis.suggestedWeeklyPaise)}/week</strong></p>` : ''}
+
+        <div style="display:flex; gap: 8px;">
+          <button class="btn btn-primary btn-sm" style="flex:1;" onclick="window.SmartPocket.openGoalMovementModal('${g.id}', 'deposit')">+ Deposit</button>
+          <button class="btn btn-secondary btn-sm" style="flex:1;" onclick="window.SmartPocket.openGoalMovementModal('${g.id}', 'withdrawal')">- Withdraw</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Renders Goals List in Savings Goals View
+ */
+function renderGoalsList(goals) {
+  const container = document.getElementById('goals-container');
+  if (!container) return;
+
+  if (!goals || goals.length === 0) {
+    container.innerHTML = '<div class="card" style="text-align:center; padding: 48px;"><p>No savings goals set yet. Save for semester books, a college trip, or tech gear!</p><button class="btn btn-primary" style="margin-top: 16px;" onclick="window.SmartPocket.openAddGoalModal()">+ Create Your First Goal</button></div>';
+    return;
+  }
+
+  container.innerHTML = goals.map(g => {
+    const analysis = g.analysis || calculateGoalProgress(g, new Date());
+    const pct = analysis.progressPct;
+    const remaining = analysis.remainingPaise;
+    const isDone = g.status === 'completed' || pct >= 100;
+
+    return `
+      <div class="card" style="margin-bottom: 16px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 12px;">
+          <div>
+            <h3 style="font-size:1.15rem; color:var(--color-primary);">${escapeHtml(g.title)}</h3>
+            <p style="font-size:0.82rem; margin-top:2px;">Target: ${formatINR(g.target_amount_paise)} ${g.target_date ? `• By ${g.target_date}` : ''}</p>
+          </div>
+          <span class="status-badge ${isDone ? 'healthy' : 'near_limit'}">${isDone ? 'Completed' : 'Active'}</span>
+        </div>
+
+        <!-- Progress Bar -->
+        <div style="background-color: var(--color-mint); border-radius: var(--radius-full); height: 10px; overflow: hidden; margin-bottom: 8px;">
+          <div style="background-color: var(--color-savings); height: 100%; width: ${pct}%; transition: width 0.4s ease;"></div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:var(--color-text-muted); margin-bottom: 8px;">
+          <span>Saved: <strong style="color:var(--color-primary);">${formatINR(g.current_saved_paise)}</strong> (${pct}%)</span>
+          <span>Remaining: <strong>${formatINR(remaining)}</strong></span>
+        </div>
+
+        <!-- Milestones -->
+        <div style="display:flex; gap:6px; font-size:0.75rem; margin-bottom: 14px;">
+          <span style="padding:2px 8px; border-radius:4px; background:${pct >= 25 ? 'var(--color-mint)' : '#f3f4f6'}; color:${pct >= 25 ? 'var(--color-savings)' : '#9ca3af'}; font-weight:600;">25%</span>
+          <span style="padding:2px 8px; border-radius:4px; background:${pct >= 50 ? 'var(--color-mint)' : '#f3f4f6'}; color:${pct >= 50 ? 'var(--color-savings)' : '#9ca3af'}; font-weight:600;">50%</span>
+          <span style="padding:2px 8px; border-radius:4px; background:${pct >= 75 ? 'var(--color-mint)' : '#f3f4f6'}; color:${pct >= 75 ? 'var(--color-savings)' : '#9ca3af'}; font-weight:600;">75%</span>
+          <span style="padding:2px 8px; border-radius:4px; background:${pct >= 100 ? 'var(--color-mint)' : '#f3f4f6'}; color:${pct >= 100 ? 'var(--color-savings)' : '#9ca3af'}; font-weight:600;">100% Reached</span>
+        </div>
+
+        ${analysis.suggestedWeeklyPaise && !isDone ? `<p style="font-size:0.82rem; color:var(--color-primary); margin-bottom: 16px;">💡 Suggested pace: Save <strong>${formatINR(analysis.suggestedWeeklyPaise)}/week</strong> to reach target on time.</p>` : ''}
+
+        <div style="display:flex; gap: 8px;">
+          <button class="btn btn-primary btn-sm" onclick="window.SmartPocket.openGoalMovementModal('${g.id}', 'deposit')">+ Deposit</button>
+          <button class="btn btn-secondary btn-sm" onclick="window.SmartPocket.openGoalMovementModal('${g.id}', 'withdrawal')">- Withdraw</button>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="window.SmartPocket.deleteGoal('${g.id}')">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
  * Savings Goals Loader
  */
 async function loadGoals() {
@@ -524,50 +652,17 @@ async function loadGoals() {
     if (window.navigator.onLine) {
       const res = await api.goals.list();
       goals = res.goals || [];
+      cachedGoals = goals;
+      for (const g of goals) {
+        saveLocalGoal(g).catch(() => {});
+      }
     } else {
       goals = await getAllLocalGoals();
+      cachedGoals = goals;
     }
 
-    const container = document.getElementById('goals-container');
-    if (!container) return;
-
-    if (goals.length === 0) {
-      container.innerHTML = '<div class="card" style="text-align:center; padding: 48px;"><p>No savings goals set yet. Save for semester books, a college trip, or tech gear!</p><button class="btn btn-primary" style="margin-top: 16px;" onclick="window.SmartPocket.openAddGoalModal()">+ Create Your First Goal</button></div>';
-      return;
-    }
-
-    container.innerHTML = goals.map(g => {
-      const analysis = g.analysis || calculateGoalProgress(g, new Date());
-      return `
-        <div class="card" style="margin-bottom: 16px;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 12px;">
-            <div>
-              <h3 style="font-size:1.15rem; color:var(--color-primary);">${escapeHtml(g.title)}</h3>
-              <p style="font-size:0.82rem; margin-top:2px;">Target: ${formatINR(g.target_amount_paise)} ${g.target_date ? `• By ${g.target_date}` : ''}</p>
-            </div>
-            <span class="status-badge ${g.status === 'completed' ? 'healthy' : 'near_limit'}">${g.status}</span>
-          </div>
-
-          <!-- Progress Bar -->
-          <div style="background-color: var(--color-mint); border-radius: var(--radius-full); height: 10px; overflow: hidden; margin-bottom: 8px;">
-            <div style="background-color: var(--color-savings); height: 100%; width: ${analysis.progressPct}%; transition: width 0.3s ease;"></div>
-          </div>
-
-          <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:var(--color-text-muted); margin-bottom: 16px;">
-            <span>Saved: <strong>${formatINR(g.current_saved_paise)}</strong> (${analysis.progressPct}%)</span>
-            <span>Remaining: <strong>${formatINR(analysis.remainingPaise)}</strong></span>
-          </div>
-
-          ${analysis.suggestedWeeklyPaise ? `<p style="font-size:0.82rem; color:var(--color-primary); margin-bottom: 16px;">💡 Suggested pace: Save <strong>${formatINR(analysis.suggestedWeeklyPaise)}/week</strong> to reach target on time.</p>` : ''}
-
-          <div style="display:flex; gap: 8px;">
-            <button class="btn btn-primary btn-sm" onclick="window.SmartPocket.openGoalMovementModal('${g.id}', 'deposit')">+ Deposit</button>
-            <button class="btn btn-secondary btn-sm" onclick="window.SmartPocket.openGoalMovementModal('${g.id}', 'withdrawal')">- Withdraw</button>
-            <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="window.SmartPocket.deleteGoal('${g.id}')">Delete</button>
-          </div>
-        </div>
-      `;
-    }).join('');
+    renderGoalsList(goals);
+    renderDashboardGoals(goals);
 
     // Render Savings Activity History
     const activityContainer = document.getElementById('goals-activity-table-body');
@@ -577,13 +672,25 @@ async function loadGoals() {
         if (window.navigator.onLine) {
           const mvtRes = await api.goals.allMovements();
           movements = mvtRes.movements || [];
+        } else {
+          const allTxs = await getAllLocalTransactions();
+          movements = allTxs
+            .filter(t => t.type === 'transfer_savings')
+            .map(t => ({
+              id: t.id,
+              goal_title: t.description?.replace(/^(Deposit to |Withdrawal from )/, '') || 'Goal',
+              amount_paise: t.amount_paise,
+              note: t.description || '',
+              created_at: t.date
+            }));
         }
+
         if (movements.length === 0) {
           activityContainer.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 24px; color: var(--color-text-muted);">No savings deposits or withdrawals yet.</td></tr>';
         } else {
           activityContainer.innerHTML = movements.map(m => `
             <tr>
-              <td>${m.created_at.slice(0, 10)}</td>
+              <td>${m.created_at ? m.created_at.slice(0, 10) : '-'}</td>
               <td><strong>${escapeHtml(m.goal_title || 'Goal')}</strong></td>
               <td>
                 <span class="badge-tag" style="background-color:var(--color-mint); color:${m.amount_paise >= 0 ? 'var(--color-primary)' : 'var(--color-savings)'}; font-weight:600;">
@@ -604,6 +711,7 @@ async function loadGoals() {
   } catch (err) {
     console.error('Failed to load goals:', err);
   }
+}
 }
 
 /**
@@ -762,10 +870,44 @@ window.SmartPocket = {
     }
     openModal('modal-add-goal');
   },
-  openGoalMovementModal: (goalId, type) => {
+  openGoalMovementModal: async (goalId, type) => {
+    let goal = cachedGoals.find(g => g.id === goalId);
+    if (!goal) {
+      goal = await getLocalGoal(goalId);
+    }
+
     document.getElementById('movement-goal-id').value = goalId;
     document.getElementById('movement-type').value = type;
-    document.getElementById('movement-modal-title').textContent = type === 'deposit' ? 'Deposit into Goal' : 'Withdraw from Goal';
+
+    const titleEl = document.getElementById('movement-modal-title');
+    const subTitleEl = document.getElementById('movement-modal-subtitle');
+    const amountInput = document.getElementById('movement-amount');
+    const hintEl = document.getElementById('movement-limit-hint');
+    const submitBtn = document.getElementById('btn-submit-movement');
+
+    const goalTitle = goal ? goal.title : 'Goal';
+    const targetRupees = goal ? paiseToRupees(goal.target_amount_paise) : 0;
+    const savedRupees = goal ? paiseToRupees(goal.current_saved_paise) : 0;
+    const remainingRupees = Math.max(0, targetRupees - savedRupees);
+
+    if (type === 'deposit') {
+      if (titleEl) titleEl.textContent = `Deposit into "${goalTitle}"`;
+      if (subTitleEl) subTitleEl.textContent = `Target: ₹${targetRupees.toFixed(2)} • Saved: ₹${savedRupees.toFixed(2)} • Remaining: ₹${remainingRupees.toFixed(2)}`;
+      if (submitBtn) submitBtn.textContent = 'Confirm Deposit';
+
+      const availText = document.getElementById('dash-available-balance')?.textContent || '₹0.00';
+      if (hintEl) hintEl.textContent = `Available Pocket Cash to spend/save: ${availText}`;
+    } else {
+      if (titleEl) titleEl.textContent = `Withdraw from "${goalTitle}"`;
+      if (subTitleEl) subTitleEl.textContent = `Saved in this goal: ₹${savedRupees.toFixed(2)} (Available to withdraw: ₹${savedRupees.toFixed(2)})`;
+      if (submitBtn) submitBtn.textContent = 'Confirm Withdrawal';
+      if (hintEl) hintEl.textContent = `Max withdrawable amount: ₹${savedRupees.toFixed(2)}`;
+    }
+
+    if (amountInput) {
+      amountInput.value = '';
+    }
+
     openModal('modal-goal-movement');
   },
   deleteTransaction: async (id) => {
@@ -1104,7 +1246,7 @@ function setupEventHandlers() {
   if (movementForm) {
     movementForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const submitBtn = movementForm.querySelector('button[type="submit"]');
+      const submitBtn = document.getElementById('btn-submit-movement') || movementForm.querySelector('button[type="submit"]');
       const goalId = document.getElementById('movement-goal-id').value;
       const type = document.getElementById('movement-type').value;
       const amountVal = document.getElementById('movement-amount').value;
@@ -1117,15 +1259,23 @@ function setupEventHandlers() {
 
       if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Processing movement...';
+        submitBtn.textContent = type === 'deposit' ? 'Processing deposit...' : 'Processing withdrawal...';
       }
 
       const movementId = `mvt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const payload = { id: movementId, amount: amountVal, type, note };
 
       try {
+        let updatedGoal = null;
         if (window.navigator.onLine) {
-          await api.goals.movement(goalId, payload);
+          const res = await api.goals.movement(goalId, payload);
+          updatedGoal = res.goal;
+          if (updatedGoal) {
+            await saveLocalGoal(updatedGoal);
+            const idx = cachedGoals.findIndex(g => g.id === goalId);
+            if (idx >= 0) cachedGoals[idx] = updatedGoal;
+            else cachedGoals.push(updatedGoal);
+          }
         } else {
           // Offline handling: update local goal state and queue offline action
           const localGoal = await getLocalGoal(goalId);
@@ -1137,7 +1287,12 @@ function setupEventHandlers() {
             }
             localGoal.current_saved_paise = Math.max(0, localGoal.current_saved_paise + delta);
             localGoal.status = localGoal.current_saved_paise >= localGoal.target_amount_paise ? 'completed' : 'active';
+            localGoal.analysis = calculateGoalProgress(localGoal, new Date());
             await saveLocalGoal(localGoal);
+            updatedGoal = localGoal;
+            const idx = cachedGoals.findIndex(g => g.id === goalId);
+            if (idx >= 0) cachedGoals[idx] = localGoal;
+            else cachedGoals.push(localGoal);
           }
           await queueOfflineAction('goal_movement', 'create', movementId, { goal_id: goalId, ...payload });
         }
@@ -1152,12 +1307,15 @@ function setupEventHandlers() {
           'success'
         );
 
-        await loadGoals();
-        await loadDashboard();
+        await Promise.all([
+          loadGoals(),
+          loadDashboard()
+        ]);
+
         if (activeView === 'budgets') await loadBudgets();
         if (activeView === 'transactions') await loadTransactions();
       } catch (err) {
-        showToast(err.message, 'error');
+        showToast(err.message || 'Movement failed.', 'error');
       } finally {
         if (submitBtn) {
           submitBtn.disabled = false;

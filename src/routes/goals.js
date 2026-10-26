@@ -326,19 +326,38 @@ goalsRouter.post('/:id/movements', requireAuth, (req, res) => {
         ? `Deposit to ${goal.title}${note ? ` (${note.trim()})` : ''}`
         : `Withdrawal from ${goal.title}${note ? ` (${note.trim()})` : ''}`;
 
+      const categoryName = type === 'deposit' ? 'Savings Goal Deposit' : 'Savings Goal Withdrawal';
       db.prepare(`
         INSERT INTO transactions (
           id, user_id, amount_paise, type, category_id, category_name,
           classification, description, date, version, created_at, updated_at
-        ) VALUES (?, ?, ?, 'transfer_savings', 'cat_save_goal', 'Savings Goal Deposit', 'savings', ?, ?, 1, ?, ?)
-      `).run(txId, req.user.id, movementDelta, txDesc, today, now, now);
+        ) VALUES (?, ?, ?, 'transfer_savings', 'cat_save_goal', ?, 'savings', ?, ?, 1, ?, ?)
+      `).run(txId, req.user.id, movementDelta, categoryName, txDesc, today, now, now);
 
       db.exec('COMMIT;');
 
       const updatedGoal = db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(goalId);
+
+      // Compute fresh spendable balance after movement commit
+      const freshLifetime = db.prepare(`
+        SELECT
+          COALESCE(SUM(CASE WHEN type = 'income' THEN amount_paise ELSE 0 END), 0) AS total_income,
+          COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_paise ELSE 0 END), 0) AS total_expense,
+          COALESCE(SUM(CASE WHEN type = 'transfer_savings' THEN amount_paise ELSE 0 END), 0) AS total_savings
+        FROM transactions
+        WHERE user_id = ?
+      `).get(req.user.id);
+
+      const availableBalancePaise = calculateAvailableBalance({
+        totalIncomePaise: freshLifetime.total_income,
+        totalExpensePaise: freshLifetime.total_expense,
+        netSavingsTransfersPaise: freshLifetime.total_savings
+      });
+
       return res.status(201).json({
         message: type === 'deposit' ? 'Deposit recorded successfully' : 'Withdrawal recorded successfully',
         movementId,
+        availableBalancePaise,
         goal: {
           ...updatedGoal,
           analysis: calculateGoalProgress(updatedGoal, new Date())

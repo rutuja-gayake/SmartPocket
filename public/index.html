@@ -306,6 +306,17 @@
             </div>
           </div>
 
+          <!-- Active Savings Goals Overview Card -->
+          <div class="card" style="margin-bottom: var(--space-lg);">
+            <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+              <span>Active Savings Goals</span>
+              <button class="btn btn-secondary btn-sm" data-view="goals">Manage All Goals</button>
+            </div>
+            <div id="dash-goals-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 12px;">
+              <p style="color:var(--color-text-muted); font-size:0.85rem;">Loading active goals...</p>
+            </div>
+          </div>
+
           <!-- Recent Transactions Table -->
           <div class="card">
             <div class="card-title">
@@ -627,19 +638,21 @@
         <h3 id="movement-modal-title">Deposit into Goal</h3>
         <button class="modal-close">&times;</button>
       </div>
+      <p id="movement-modal-subtitle" style="font-size:0.85rem; color:var(--color-text-muted); margin-bottom:12px;"></p>
       <form id="form-goal-movement">
         <input type="hidden" id="movement-goal-id">
         <input type="hidden" id="movement-type" value="deposit">
 
         <div class="form-group">
-          <label class="form-label" for="movement-amount">Amount (₹)</label>
-          <input type="number" step="0.01" id="movement-amount" class="form-control" required placeholder="500.00">
+          <label class="form-label" for="movement-amount" id="movement-amount-label">Amount (₹)</label>
+          <input type="number" step="0.01" min="0.01" id="movement-amount" class="form-control" required placeholder="500.00">
+          <small id="movement-limit-hint" style="display:block; margin-top:4px; font-size:0.78rem; color:var(--color-text-muted);"></small>
         </div>
         <div class="form-group">
-          <label class="form-label" for="movement-note">Note</label>
+          <label class="form-label" for="movement-note">Note (Optional)</label>
           <input type="text" id="movement-note" class="form-control" placeholder="e.g. Saved from weekly allowance">
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:12px;">Confirm Movement</button>
+        <button type="submit" id="btn-submit-movement" class="btn btn-primary" style="width:100%; margin-top:12px;">Confirm Movement</button>
       </form>
     </div>
   </div>
