@@ -130,15 +130,29 @@ async function loadDashboard() {
       }
     }
 
-    // Authoritative available balance: use server calculation if online, otherwise fallback to local calculation
+    // Financial calculation model:
+    // Available Pocket Cash = Total Available Funds − Actual Expenses − Net Savings Transfers
+    const totalAvailableFundsPaise = (budgetRes && typeof budgetRes.totalAvailableFundsPaise === 'number')
+      ? budgetRes.totalAvailableFundsPaise
+      : totalIncome;
+
+    const actualExpensesPaise = (budgetRes && typeof budgetRes.periodStats?.expense_paise === 'number')
+      ? budgetRes.periodStats.expense_paise
+      : totalExpense;
+
+    const totalSavedInGoalsPaise = goals.reduce((acc, g) => acc + (g.current_saved_paise || 0), 0);
+    const netSavingsPaise = (budgetRes && typeof budgetRes.netSavingsTransfersPaise === 'number')
+      ? budgetRes.netSavingsTransfersPaise
+      : (savingsTransfers !== 0 ? savingsTransfers : totalSavedInGoalsPaise);
+
     let availableBalancePaise;
     if (budgetRes && typeof budgetRes.availableBalancePaise === 'number') {
       availableBalancePaise = budgetRes.availableBalancePaise;
     } else {
       availableBalancePaise = calculateAvailableBalance({
-        totalIncomePaise: totalIncome,
-        totalExpensePaise: totalExpense,
-        netSavingsTransfersPaise: savingsTransfers
+        totalIncomePaise: totalAvailableFundsPaise,
+        totalExpensePaise: actualExpensesPaise,
+        netSavingsTransfersPaise: netSavingsPaise
       });
     }
 
@@ -146,27 +160,35 @@ async function loadDashboard() {
     const safeDaily = calculateSafeDailySpending({
       availableBalancePaise,
       monthlyBudgetPaise,
-      currentMonthExpensePaise: totalExpense,
+      currentMonthExpensePaise: actualExpensesPaise,
       currentDate: new Date(),
       totalTransactionCount: txs.length
     });
 
     // Populate UI elements
     document.getElementById('dash-available-balance').textContent = formatINR(availableBalancePaise);
+    const formulaEl = document.getElementById('dash-available-formula');
+    if (formulaEl) {
+      formulaEl.textContent = `${formatINR(totalAvailableFundsPaise, false)} − ${formatINR(actualExpensesPaise, false)} − ${formatINR(netSavingsPaise, false)}`;
+    }
     document.getElementById('dash-safe-daily').textContent = formatINR(safeDaily.safeDailyPaise);
     document.getElementById('dash-safe-daily-desc').textContent = safeDaily.message;
     document.getElementById('dash-safe-status-badge').innerHTML = getStatusBadgeHtml(safeDaily.status);
 
-    document.getElementById('dash-income').textContent = formatINR(totalIncome);
-    document.getElementById('dash-expense').textContent = formatINR(totalExpense);
+    document.getElementById('dash-income').textContent = formatINR(totalAvailableFundsPaise);
+    document.getElementById('dash-expense').textContent = formatINR(actualExpensesPaise);
+    const dashSavingsEl = document.getElementById('dash-savings-total');
+    if (dashSavingsEl) {
+      dashSavingsEl.textContent = formatINR(totalSavedInGoalsPaise);
+    }
     document.getElementById('dash-budget-total').textContent = monthlyBudgetPaise > 0 ? formatINR(monthlyBudgetPaise) : 'No Budget Set';
 
     // 50/30/20 Guideline metrics
     const metrics503020 = calculate503020Metrics({
-      incomePaise: totalIncome,
+      incomePaise: totalAvailableFundsPaise,
       needsPaise: needsExpense,
       wantsPaise: wantsExpense,
-      savingsPaise: savingsTransfers
+      savingsPaise: netSavingsPaise
     });
 
     document.getElementById('dash-needs-pct').textContent = `${metrics503020.actual.actualNeedsPct}%`;

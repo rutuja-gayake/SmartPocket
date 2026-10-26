@@ -62,9 +62,11 @@ export function calculateAvailableBalance({
   totalIncomePaise = 0,
   totalExpensePaise = 0,
   netSavingsTransfersPaise = 0,
-  openingBalancePaise = 0
+  openingBalancePaise = 0,
+  adjustmentsPaise = 0
 }) {
-  return openingBalancePaise + totalIncomePaise - totalExpensePaise - netSavingsTransfersPaise;
+  const totalAvailableFunds = openingBalancePaise + totalIncomePaise + adjustmentsPaise;
+  return totalAvailableFunds - totalExpensePaise - netSavingsTransfersPaise;
 }
 
 export function calculateSafeDailySpending({

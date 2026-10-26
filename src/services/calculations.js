@@ -11,22 +11,27 @@ import { getRemainingDaysInMonth } from '../utils/date.js';
  * Calculates current available spendable balance.
  *
  * Formula:
- * Available Balance = total income - total expenses - net savings transfers
+ * Available Pocket Cash = Total Available Funds − Actual Expenses − Net Savings Transfers
+ * Where:
+ * Total Available Funds = opening balance + total income + adjustments
  *
  * @param {Object} params
  * @param {number} params.totalIncomePaise
  * @param {number} params.totalExpensePaise
  * @param {number} [params.netSavingsTransfersPaise=0]
  * @param {number} [params.openingBalancePaise=0]
+ * @param {number} [params.adjustmentsPaise=0]
  * @returns {number}
  */
 export function calculateAvailableBalance({
   totalIncomePaise = 0,
   totalExpensePaise = 0,
   netSavingsTransfersPaise = 0,
-  openingBalancePaise = 0
+  openingBalancePaise = 0,
+  adjustmentsPaise = 0
 }) {
-  return openingBalancePaise + totalIncomePaise - totalExpensePaise - netSavingsTransfersPaise;
+  const totalAvailableFunds = openingBalancePaise + totalIncomePaise + adjustmentsPaise;
+  return totalAvailableFunds - totalExpensePaise - netSavingsTransfersPaise;
 }
 
 /**

@@ -57,10 +57,14 @@ budgetsRouter.get('/', requireAuth, (req, res) => {
       WHERE user_id = ?
     `).get(userId);
 
+    const totalAvailableFundsPaise = lifetimeStats.total_income;
+    const totalExpensesPaise = lifetimeStats.total_expense;
+    const netSavingsTransfersPaise = lifetimeStats.total_savings;
+
     const availableBalancePaise = calculateAvailableBalance({
-      totalIncomePaise: lifetimeStats.total_income,
-      totalExpensePaise: lifetimeStats.total_expense,
-      netSavingsTransfersPaise: lifetimeStats.total_savings
+      totalIncomePaise: totalAvailableFundsPaise,
+      totalExpensePaise: totalExpensesPaise,
+      netSavingsTransfersPaise
     });
 
     const monthlyBudgetPaise = budget ? budget.total_budget_paise : 0;
@@ -90,6 +94,9 @@ budgetsRouter.get('/', requireAuth, (req, res) => {
       period,
       budget: budget || null,
       availableBalancePaise,
+      totalAvailableFundsPaise,
+      totalExpensesPaise,
+      netSavingsTransfersPaise,
       periodStats,
       safeDaily: safeDailyInfo,
       analysis503020: metrics503020

@@ -18,6 +18,40 @@ test('Financial Calculations - Available Balance', () => {
   assert.equal(balance, 400000); // 4,000 INR remaining in pocket
 });
 
+test('Financial Calculations - User Scenario (Pocket Cash = Available Funds - Actual Expenses - Net Savings)', () => {
+  // Initial state: ₹10,000 received, ₹0 expense, ₹0 savings -> ₹10,000
+  let pocketCash = calculateAvailableBalance({
+    totalIncomePaise: 1000000,
+    totalExpensePaise: 0,
+    netSavingsTransfersPaise: 0
+  });
+  assert.equal(pocketCash, 1000000);
+
+  // Spends ₹3,000 -> ₹7,000
+  pocketCash = calculateAvailableBalance({
+    totalIncomePaise: 1000000,
+    totalExpensePaise: 300000,
+    netSavingsTransfersPaise: 0
+  });
+  assert.equal(pocketCash, 700000);
+
+  // Deposits ₹1,000 into Laptop Savings Goal -> ₹6,000
+  pocketCash = calculateAvailableBalance({
+    totalIncomePaise: 1000000,
+    totalExpensePaise: 300000,
+    netSavingsTransfersPaise: 100000
+  });
+  assert.equal(pocketCash, 600000);
+
+  // Withdraws ₹500 from that savings goal -> Net savings allocation = ₹500 -> ₹6,500
+  pocketCash = calculateAvailableBalance({
+    totalIncomePaise: 1000000,
+    totalExpensePaise: 300000,
+    netSavingsTransfersPaise: 50000
+  });
+  assert.equal(pocketCash, 650000);
+});
+
 test('Financial Calculations - Remaining Budget', () => {
   assert.equal(calculateRemainingBudget(500000, 300000), 200000);
   assert.equal(calculateRemainingBudget(500000, 600000), -100000); // Exceeded
