@@ -69,7 +69,9 @@ export const api = {
     create: (payload) => api.request('/api/goals', { method: 'POST', body: payload }),
     update: (id, payload) => api.request(`/api/goals/${id}`, { method: 'PATCH', body: payload }),
     delete: (id) => api.request(`/api/goals/${id}`, { method: 'DELETE' }),
-    movement: (id, payload) => api.request(`/api/goals/${id}/movements`, { method: 'POST', body: payload })
+    movement: (id, payload) => api.request(`/api/goals/${id}/movements`, { method: 'POST', body: payload }),
+    goalMovements: (id) => api.request(`/api/goals/${id}/movements`),
+    allMovements: () => api.request('/api/goals/movements/all')
   },
 
   // Categories

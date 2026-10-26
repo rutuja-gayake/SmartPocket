@@ -38,6 +38,12 @@ syncRouter.get('/pull', requireAuth, (req, res) => {
       WHERE user_id = ? AND created_at > ?
     `).all(userId, since);
 
+    const movements = db.prepare(`
+      SELECT * FROM savings_movements
+      WHERE user_id = ? AND created_at > ?
+      ORDER BY created_at ASC
+    `).all(userId, since);
+
     const serverTimestamp = new Date().toISOString();
 
     // Update sync metadata
@@ -53,7 +59,8 @@ syncRouter.get('/pull', requireAuth, (req, res) => {
         transactions,
         budgets,
         goals,
-        categories: customCategories
+        categories: customCategories,
+        movements
       }
     });
   } catch (err) {
@@ -182,6 +189,52 @@ syncRouter.post('/push', requireAuth, (req, res) => {
           } else if (type === 'delete') {
             db.prepare('DELETE FROM savings_goals WHERE id = ? AND user_id = ?').run(recordId, userId);
             processed.push({ operationId, recordId, status: 'deleted' });
+          }
+        } else if (entity === 'goal_movement') {
+          if (type === 'create') {
+            const existing = db.prepare('SELECT id FROM savings_movements WHERE id = ?').get(recordId);
+            if (existing) {
+              processed.push({ operationId, recordId, status: 'already_exists' });
+              continue;
+            }
+
+            const goal = db.prepare('SELECT * FROM savings_goals WHERE id = ? AND user_id = ?').get(payload.goal_id, userId);
+            if (goal) {
+              const amountPaise = typeof payload.amount_paise === 'number'
+                ? payload.amount_paise
+                : rupeesToPaise(payload.amount);
+              const movementDelta = payload.type === 'withdrawal' ? -amountPaise : amountPaise;
+              const newSaved = Math.max(0, goal.current_saved_paise + movementDelta);
+              const newStatus = newSaved >= goal.target_amount_paise ? 'completed' : 'active';
+              const today = (payload.date || now).slice(0, 10);
+
+              db.prepare(`
+                UPDATE savings_goals
+                SET current_saved_paise = ?, status = ?, version = version + 1, updated_at = ?
+                WHERE id = ?
+              `).run(newSaved, newStatus, now, goal.id);
+
+              db.prepare(`
+                INSERT INTO savings_movements (id, goal_id, user_id, amount_paise, note, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+              `).run(recordId, goal.id, userId, movementDelta, payload.note || '', payload.created_at || now);
+
+              const txId = crypto.randomUUID();
+              const txDesc = payload.type === 'deposit'
+                ? `Deposit to ${goal.title}${payload.note ? ` (${payload.note})` : ''}`
+                : `Withdrawal from ${goal.title}${payload.note ? ` (${payload.note})` : ''}`;
+
+              db.prepare(`
+                INSERT INTO transactions (
+                  id, user_id, amount_paise, type, category_id, category_name,
+                  classification, description, date, version, created_at, updated_at
+                ) VALUES (?, ?, ?, 'transfer_savings', 'cat_save_goal', 'Savings Goal Deposit', 'savings', ?, ?, 1, ?, ?)
+              `).run(txId, userId, movementDelta, txDesc, today, now, now);
+
+              processed.push({ operationId, recordId, status: 'created' });
+            } else {
+              errors.push({ operationId, recordId, error: 'Goal not found' });
+            }
           }
         }
       }

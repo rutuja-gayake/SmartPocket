@@ -1,6 +1,6 @@
 /**
  * SmartPocket Service Worker
- * Version: smartpocket-shell-v2
+ * Version: smartpocket-shell-v3
  *
  * Strategies:
  * - Network-First for HTML & JS: Always fetches the freshest code when online,
@@ -8,7 +8,7 @@
  * - API requests (/api/*): Passed straight to network (offline handling via IndexedDB).
  */
 
-const CACHE_NAME = 'smartpocket-shell-v2';
+const CACHE_NAME = 'smartpocket-shell-v3';
 
 const STATIC_ASSETS = [
   '/',

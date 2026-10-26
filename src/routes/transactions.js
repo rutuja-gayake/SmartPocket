@@ -77,8 +77,8 @@ transactionsRouter.get('/', requireAuth, (req, res) => {
       SELECT
         COALESCE(SUM(CASE WHEN type = 'income' THEN amount_paise ELSE 0 END), 0) AS total_income_paise,
         COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_paise ELSE 0 END), 0) AS total_expense_paise,
-        COALESCE(SUM(CASE WHEN classification = 'need' THEN amount_paise ELSE 0 END), 0) AS needs_expense_paise,
-        COALESCE(SUM(CASE WHEN classification = 'want' THEN amount_paise ELSE 0 END), 0) AS wants_expense_paise,
+        COALESCE(SUM(CASE WHEN classification = 'need' AND type = 'expense' THEN amount_paise ELSE 0 END), 0) AS needs_expense_paise,
+        COALESCE(SUM(CASE WHEN classification = 'want' AND type = 'expense' THEN amount_paise ELSE 0 END), 0) AS wants_expense_paise,
         COALESCE(SUM(CASE WHEN type = 'transfer_savings' THEN amount_paise ELSE 0 END), 0) AS savings_transfers_paise
       FROM transactions
       WHERE ${whereClause}
@@ -148,6 +148,14 @@ transactionsRouter.post('/', requireAuth, (req, res) => {
     const now = new Date().toISOString();
     const db = getDb();
 
+    // Internal transfers to savings must never be stored as regular expenses
+    let resolvedType = type;
+    let resolvedClassification = classification;
+    if (category_name.trim() === 'Savings Goal Deposit' || classification === 'savings') {
+      resolvedType = 'transfer_savings';
+      resolvedClassification = 'savings';
+    }
+
     db.exec('BEGIN TRANSACTION;');
     try {
       // Check if transaction ID already exists for this user (prevent duplicate sync/resubmission)
@@ -169,10 +177,10 @@ transactionsRouter.post('/', requireAuth, (req, res) => {
         txId,
         req.user.id,
         amountPaise,
-        type,
+        resolvedType,
         category_id || null,
         category_name.trim(),
-        classification,
+        resolvedClassification,
         description.trim(),
         date,
         now,
@@ -180,7 +188,7 @@ transactionsRouter.post('/', requireAuth, (req, res) => {
       );
 
       // If this transaction is a savings transfer linked to a goal, update goal
-      if (type === 'transfer_savings' && goal_id) {
+      if (resolvedType === 'transfer_savings' && goal_id) {
         const goal = db.prepare('SELECT id, current_saved_paise, target_amount_paise FROM savings_goals WHERE id = ? AND user_id = ?').get(goal_id, req.user.id);
         if (goal) {
           const newCurrentSaved = Math.max(0, goal.current_saved_paise + amountPaise);

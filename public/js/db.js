@@ -116,6 +116,10 @@ export async function getAllLocalGoals() {
   return perform('goals', 'readonly', (store) => store.getAll());
 }
 
+export async function getLocalGoal(id) {
+  return perform('goals', 'readonly', (store) => store.get(id));
+}
+
 export async function saveLocalGoal(goal) {
   return perform('goals', 'readwrite', (store) => store.put(goal));
 }

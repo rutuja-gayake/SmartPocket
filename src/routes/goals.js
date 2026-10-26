@@ -3,8 +3,8 @@ import crypto from 'node:crypto';
 import { getDb } from '../database/db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { rupeesToPaise } from '../utils/currency.js';
-import { calculateGoalProgress } from '../services/calculations.js';
-import { validateGoalPayload } from '../validators/index.js';
+import { calculateGoalProgress, calculateAvailableBalance } from '../services/calculations.js';
+import { validateGoalPayload, validateMovementPayload } from '../validators/index.js';
 
 export const goalsRouter = express.Router();
 
@@ -180,27 +180,116 @@ goalsRouter.delete('/:id', requireAuth, (req, res) => {
 });
 
 /**
+ * GET /api/goals/movements/all
+ * Retrieves all savings movements across all goals for the user.
+ */
+goalsRouter.get('/movements/all', requireAuth, (req, res) => {
+  try {
+    const db = getDb();
+    const movements = db.prepare(`
+      SELECT m.id, m.goal_id, m.amount_paise, m.note, m.created_at, g.title AS goal_title
+      FROM savings_movements m
+      JOIN savings_goals g ON m.goal_id = g.id
+      WHERE m.user_id = ?
+      ORDER BY m.created_at DESC
+      LIMIT 100
+    `).all(req.user.id);
+    return res.json({ movements });
+  } catch (err) {
+    console.error('Fetch all movements error:', err);
+    return res.status(500).json({ error: 'Failed to retrieve savings movements history.' });
+  }
+});
+
+/**
+ * GET /api/goals/:id/movements
+ * Retrieves savings movements for a specific goal.
+ */
+goalsRouter.get('/:id/movements', requireAuth, (req, res) => {
+  try {
+    const goalId = req.params.id;
+    const db = getDb();
+    const goal = db.prepare('SELECT id FROM savings_goals WHERE id = ? AND user_id = ?').get(goalId, req.user.id);
+    if (!goal) {
+      return res.status(404).json({ error: 'Savings goal not found or access denied.' });
+    }
+
+    const movements = db.prepare(`
+      SELECT id, goal_id, user_id, amount_paise, note, created_at
+      FROM savings_movements
+      WHERE goal_id = ? AND user_id = ?
+      ORDER BY created_at DESC
+    `).all(goalId, req.user.id);
+
+    return res.json({ movements });
+  } catch (err) {
+    console.error('Fetch goal movements error:', err);
+    return res.status(500).json({ error: 'Failed to retrieve goal movements.' });
+  }
+});
+
+/**
  * POST /api/goals/:id/movements
- * Add deposit or withdrawal to a savings goal
- * Guarantees balance consistency by recording an audit movement and corresponding spendable transaction.
+ * Add deposit or withdrawal to a savings goal.
+ * Treats deposits/withdrawals as internal balance transfers, preserving actual monthly spent.
  */
 goalsRouter.post('/:id/movements', requireAuth, (req, res) => {
   try {
     const goalId = req.params.id;
-    const { amount, type = 'deposit', note = '' } = req.body; // type: 'deposit' | 'withdrawal'
+    const { amount, type = 'deposit', note = '', id: customId, movementId: customMvtId } = req.body;
 
-    if (!amount || Number(amount) <= 0) {
-      return res.status(400).json({ error: 'Amount must be greater than zero.' });
+    const validation = validateMovementPayload({ amount, type });
+    if (!validation.isValid) {
+      return res.status(400).json({ error: validation.errors.join(' ') });
     }
 
     const amountPaise = rupeesToPaise(amount);
     const db = getDb();
 
+    // Verify authenticated user owns the goal
     const goal = db.prepare('SELECT * FROM savings_goals WHERE id = ? AND user_id = ?').get(goalId, req.user.id);
     if (!goal) {
-      return res.status(404).json({ error: 'Savings goal not found.' });
+      return res.status(404).json({ error: 'Savings goal not found or access denied.' });
     }
 
+    // Idempotency check: if movement ID already processed, return existing goal state
+    const movementId = customId || customMvtId || crypto.randomUUID();
+    const existingMovement = db.prepare('SELECT id FROM savings_movements WHERE id = ?').get(movementId);
+    if (existingMovement) {
+      return res.status(200).json({
+        message: 'Savings movement already recorded',
+        goal: {
+          ...goal,
+          analysis: calculateGoalProgress(goal, new Date())
+        }
+      });
+    }
+
+    // Verify sufficient available funds if depositing
+    if (type === 'deposit') {
+      const lifetime = db.prepare(`
+        SELECT
+          COALESCE(SUM(CASE WHEN type = 'income' THEN amount_paise ELSE 0 END), 0) AS total_income,
+          COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_paise ELSE 0 END), 0) AS total_expense,
+          COALESCE(SUM(CASE WHEN type = 'transfer_savings' THEN amount_paise ELSE 0 END), 0) AS total_savings
+        FROM transactions
+        WHERE user_id = ?
+      `).get(req.user.id);
+
+      const availableBalancePaise = calculateAvailableBalance({
+        totalIncomePaise: lifetime.total_income,
+        totalExpensePaise: lifetime.total_expense,
+        netSavingsTransfersPaise: lifetime.total_savings
+      });
+
+      if (amountPaise > availableBalancePaise) {
+        return res.status(400).json({
+          error: `Insufficient available balance (₹${(availableBalancePaise / 100).toFixed(2)}) to deposit ₹${(amountPaise / 100).toFixed(2)}.`
+        });
+      }
+    }
+
+    // Verify withdrawal amount does not exceed saved amount in goal
     if (type === 'withdrawal' && amountPaise > goal.current_saved_paise) {
       return res.status(400).json({
         error: `Cannot withdraw more than current saved amount (₹${(goal.current_saved_paise / 100).toFixed(2)}).`
@@ -223,31 +312,33 @@ goalsRouter.post('/:id/movements', requireAuth, (req, res) => {
       `).run(newSaved, newStatus, now, goalId);
 
       // 2. Insert movement audit record
-      const movementId = crypto.randomUUID();
       db.prepare(`
         INSERT INTO savings_movements (id, goal_id, user_id, amount_paise, note, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
-      `).run(movementId, goalId, req.user.id, movementDelta, note.trim(), now);
+      `).run(movementId, goalId, req.user.id, movementDelta, note ? note.trim() : '', now);
 
-      // 3. Create corresponding spendable transaction so pocket balance accurately reflects the transfer
+      // 3. Insert transaction record for internal transfer:
+      // Deposit: +amountPaise with type 'transfer_savings'
+      // Withdrawal: -amountPaise with type 'transfer_savings'
+      // Both keep income and actual monthly expense completely unchanged.
       const txId = crypto.randomUUID();
-      const txType = type === 'deposit' ? 'transfer_savings' : 'income';
       const txDesc = type === 'deposit'
-        ? `Deposit to ${goal.title}${note ? ` (${note})` : ''}`
-        : `Withdrawal from ${goal.title}${note ? ` (${note})` : ''}`;
+        ? `Deposit to ${goal.title}${note ? ` (${note.trim()})` : ''}`
+        : `Withdrawal from ${goal.title}${note ? ` (${note.trim()})` : ''}`;
 
       db.prepare(`
         INSERT INTO transactions (
           id, user_id, amount_paise, type, category_id, category_name,
           classification, description, date, version, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'cat_save_goal', 'Savings Goal Deposit', 'savings', ?, ?, 1, ?, ?)
-      `).run(txId, req.user.id, amountPaise, txType, txDesc, today, now, now);
+        ) VALUES (?, ?, ?, 'transfer_savings', 'cat_save_goal', 'Savings Goal Deposit', 'savings', ?, ?, 1, ?, ?)
+      `).run(txId, req.user.id, movementDelta, txDesc, today, now, now);
 
       db.exec('COMMIT;');
 
       const updatedGoal = db.prepare('SELECT * FROM savings_goals WHERE id = ?').get(goalId);
       return res.status(201).json({
         message: type === 'deposit' ? 'Deposit recorded successfully' : 'Withdrawal recorded successfully',
+        movementId,
         goal: {
           ...updatedGoal,
           analysis: calculateGoalProgress(updatedGoal, new Date())

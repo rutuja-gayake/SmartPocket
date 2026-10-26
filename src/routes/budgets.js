@@ -39,8 +39,8 @@ budgetsRouter.get('/', requireAuth, (req, res) => {
       SELECT
         COALESCE(SUM(CASE WHEN type = 'income' THEN amount_paise ELSE 0 END), 0) AS income_paise,
         COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_paise ELSE 0 END), 0) AS expense_paise,
-        COALESCE(SUM(CASE WHEN classification = 'need' THEN amount_paise ELSE 0 END), 0) AS needs_paise,
-        COALESCE(SUM(CASE WHEN classification = 'want' THEN amount_paise ELSE 0 END), 0) AS wants_paise,
+        COALESCE(SUM(CASE WHEN classification = 'need' AND type = 'expense' THEN amount_paise ELSE 0 END), 0) AS needs_paise,
+        COALESCE(SUM(CASE WHEN classification = 'want' AND type = 'expense' THEN amount_paise ELSE 0 END), 0) AS wants_paise,
         COALESCE(SUM(CASE WHEN type = 'transfer_savings' THEN amount_paise ELSE 0 END), 0) AS savings_transfers_paise,
         COUNT(*) AS tx_count
       FROM transactions

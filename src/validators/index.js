@@ -87,3 +87,29 @@ export function validateGoalPayload(body) {
   };
 }
 
+export function validateMovementPayload(body) {
+  const errors = [];
+  const { amount, type = 'deposit' } = body || {};
+
+  if (amount === undefined || amount === null || isNaN(Number(amount)) || Number(amount) <= 0) {
+    errors.push('Amount must be a positive number greater than zero.');
+  } else {
+    const num = Number(amount);
+    if (Math.floor(num * 100) !== Math.round(num * 100)) {
+      errors.push('Amount cannot have more than 2 decimal places.');
+    }
+    if (num > 10000000) {
+      errors.push('Amount exceeds maximum allowed limit.');
+    }
+  }
+
+  if (!['deposit', 'withdrawal'].includes(type)) {
+    errors.push('Movement type must be either deposit or withdrawal.');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+

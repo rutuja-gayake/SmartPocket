@@ -19,6 +19,7 @@ import {
   saveLocalTransaction,
   deleteLocalTransaction,
   getAllLocalGoals,
+  getLocalGoal,
   saveLocalGoal,
   deleteLocalGoal,
   getLocalBudget,
@@ -129,11 +130,17 @@ async function loadDashboard() {
       }
     }
 
-    const availableBalancePaise = calculateAvailableBalance({
-      totalIncomePaise: totalIncome,
-      totalExpensePaise: totalExpense,
-      netSavingsTransfersPaise: savingsTransfers
-    });
+    // Authoritative available balance: use server calculation if online, otherwise fallback to local calculation
+    let availableBalancePaise;
+    if (budgetRes && typeof budgetRes.availableBalancePaise === 'number') {
+      availableBalancePaise = budgetRes.availableBalancePaise;
+    } else {
+      availableBalancePaise = calculateAvailableBalance({
+        totalIncomePaise: totalIncome,
+        totalExpensePaise: totalExpense,
+        netSavingsTransfersPaise: savingsTransfers
+      });
+    }
 
     const monthlyBudgetPaise = budget ? budget.total_budget_paise : 0;
     const safeDaily = calculateSafeDailySpending({
@@ -173,14 +180,33 @@ async function loadDashboard() {
       if (txs.length === 0) {
         recentList.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 24px; color: var(--color-text-muted);">No transactions recorded this month. Click "+ Add Transaction" to begin.</td></tr>';
       } else {
-        recentList.innerHTML = txs.slice(0, 5).map(t => `
-          <tr>
-            <td>${t.date}</td>
-            <td><strong>${escapeHtml(t.category_name)}</strong><br><small style="color:var(--color-text-muted)">${escapeHtml(t.description || '')}</small></td>
-            <td><span class="badge-tag badge-${t.classification}">${t.classification}</span></td>
-            <td class="amount-${t.type}" style="text-align:right;">${t.type === 'income' ? '+' : '-'}${formatINR(t.amount_paise)}</td>
-          </tr>
-        `).join('');
+        recentList.innerHTML = txs.slice(0, 5).map(t => {
+          let badgeHtml = '';
+          let amountHtml = '';
+          if (t.type === 'transfer_savings') {
+            if (t.amount_paise >= 0) {
+              badgeHtml = '<span class="badge-tag" style="background-color:var(--color-mint); color:var(--color-primary); font-weight:600;">⇄ Savings Deposit</span>';
+              amountHtml = `<td style="text-align:right; color:var(--color-primary); font-weight:600;">⇄ ${formatINR(t.amount_paise)}</td>`;
+            } else {
+              badgeHtml = '<span class="badge-tag" style="background-color:var(--color-mint); color:var(--color-savings); font-weight:600;">← Savings Withdrawal</span>';
+              amountHtml = `<td style="text-align:right; color:var(--color-savings); font-weight:600;">+ ${formatINR(Math.abs(t.amount_paise))}</td>`;
+            }
+          } else if (t.type === 'income') {
+            badgeHtml = `<span class="badge-tag badge-${t.classification}">${t.classification}</span>`;
+            amountHtml = `<td class="amount-income" style="text-align:right;">+ ${formatINR(t.amount_paise)}</td>`;
+          } else {
+            badgeHtml = `<span class="badge-tag badge-${t.classification}">${t.classification}</span>`;
+            amountHtml = `<td class="amount-expense" style="text-align:right;">- ${formatINR(t.amount_paise)}</td>`;
+          }
+          return `
+            <tr>
+              <td>${t.date}</td>
+              <td><strong>${escapeHtml(t.category_name)}</strong><br><small style="color:var(--color-text-muted)">${escapeHtml(t.description || '')}</small></td>
+              <td>${badgeHtml}</td>
+              ${amountHtml}
+            </tr>
+          `;
+        }).join('');
       }
     }
 
@@ -285,22 +311,40 @@ async function loadTransactions() {
       return;
     }
 
-    tbody.innerHTML = txs.map(t => `
-      <tr>
-        <td>${t.date}</td>
-        <td>
-          <strong>${escapeHtml(t.category_name)}</strong>
-          ${t.description ? `<div style="font-size:0.78rem; color:var(--color-text-muted);">${escapeHtml(t.description)}</div>` : ''}
-        </td>
-        <td><span class="badge-tag badge-${t.classification}">${t.classification}</span></td>
-        <td class="amount-${t.type}">
-          ${t.type === 'income' ? '+' : '-'}${formatINR(t.amount_paise)}
-        </td>
-        <td style="text-align:right;">
-          <button class="btn btn-secondary btn-sm" onclick="window.SmartPocket.deleteTransaction('${t.id}')">Delete</button>
-        </td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = txs.map(t => {
+      let badgeHtml = '';
+      let amountHtml = '';
+      if (t.type === 'transfer_savings') {
+        if (t.amount_paise >= 0) {
+          badgeHtml = '<span class="badge-tag" style="background-color:var(--color-mint); color:var(--color-primary); font-weight:600;">⇄ Savings Deposit</span>';
+          amountHtml = `<td style="color:var(--color-primary); font-weight:600;">⇄ ${formatINR(t.amount_paise)}</td>`;
+        } else {
+          badgeHtml = '<span class="badge-tag" style="background-color:var(--color-mint); color:var(--color-savings); font-weight:600;">← Savings Withdrawal</span>';
+          amountHtml = `<td style="color:var(--color-savings); font-weight:600;">+ ${formatINR(Math.abs(t.amount_paise))}</td>`;
+        }
+      } else if (t.type === 'income') {
+        badgeHtml = `<span class="badge-tag badge-${t.classification}">${t.classification}</span>`;
+        amountHtml = `<td class="amount-income">+ ${formatINR(t.amount_paise)}</td>`;
+      } else {
+        badgeHtml = `<span class="badge-tag badge-${t.classification}">${t.classification}</span>`;
+        amountHtml = `<td class="amount-expense">- ${formatINR(t.amount_paise)}</td>`;
+      }
+
+      return `
+        <tr>
+          <td>${t.date}</td>
+          <td>
+            <strong>${escapeHtml(t.category_name)}</strong>
+            ${t.description ? `<div style="font-size:0.78rem; color:var(--color-text-muted);">${escapeHtml(t.description)}</div>` : ''}
+          </td>
+          <td>${badgeHtml}</td>
+          ${amountHtml}
+          <td style="text-align:right;">
+            <button class="btn btn-secondary btn-sm" onclick="window.SmartPocket.deleteTransaction('${t.id}')">Delete</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
   } catch (err) {
     console.error('Failed to load transactions:', err);
     showToast('Failed to load transactions.', 'error');
@@ -389,6 +433,39 @@ async function loadGoals() {
         </div>
       `;
     }).join('');
+
+    // Render Savings Activity History
+    const activityContainer = document.getElementById('goals-activity-table-body');
+    if (activityContainer) {
+      try {
+        let movements = [];
+        if (window.navigator.onLine) {
+          const mvtRes = await api.goals.allMovements();
+          movements = mvtRes.movements || [];
+        }
+        if (movements.length === 0) {
+          activityContainer.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 24px; color: var(--color-text-muted);">No savings deposits or withdrawals yet.</td></tr>';
+        } else {
+          activityContainer.innerHTML = movements.map(m => `
+            <tr>
+              <td>${m.created_at.slice(0, 10)}</td>
+              <td><strong>${escapeHtml(m.goal_title || 'Goal')}</strong></td>
+              <td>
+                <span class="badge-tag" style="background-color:var(--color-mint); color:${m.amount_paise >= 0 ? 'var(--color-primary)' : 'var(--color-savings)'}; font-weight:600;">
+                  ${m.amount_paise >= 0 ? '+ Deposit' : '- Withdrawal'}
+                </span>
+              </td>
+              <td style="font-weight:600; color:${m.amount_paise >= 0 ? 'var(--color-primary)' : 'var(--color-savings)'};">
+                ${m.amount_paise >= 0 ? '+' : '-'}${formatINR(Math.abs(m.amount_paise))}
+              </td>
+              <td style="color:var(--color-text-muted); font-size:0.85rem;">${escapeHtml(m.note || '-')}</td>
+            </tr>
+          `).join('');
+        }
+      } catch (err) {
+        console.warn('Failed to load goal movements:', err);
+      }
+    }
   } catch (err) {
     console.error('Failed to load goals:', err);
   }
@@ -846,25 +923,111 @@ function setupEventHandlers() {
     });
   }
 
-  // Goal Movement Form
+  // Category & Type synchronization in Add Transaction Modal
+  const txCategorySelect = document.getElementById('tx-category-select');
+  const txTypeSelect = document.getElementById('tx-type');
+  const txClassSelect = document.getElementById('tx-classification');
+
+  if (txCategorySelect && txTypeSelect && txClassSelect) {
+    txCategorySelect.addEventListener('change', () => {
+      const selectedOption = txCategorySelect.selectedOptions[0];
+      const catType = selectedOption?.dataset?.type;
+      if (catType === 'savings' || txCategorySelect.value === 'Savings Goal Deposit') {
+        txTypeSelect.value = 'transfer_savings';
+        txClassSelect.value = 'savings';
+      } else if (catType === 'income') {
+        txTypeSelect.value = 'income';
+        txClassSelect.value = 'income';
+      } else if (catType === 'need') {
+        txTypeSelect.value = 'expense';
+        txClassSelect.value = 'need';
+      } else if (catType === 'want') {
+        txTypeSelect.value = 'expense';
+        txClassSelect.value = 'want';
+      }
+    });
+
+    txTypeSelect.addEventListener('change', () => {
+      if (txTypeSelect.value === 'transfer_savings') {
+        txClassSelect.value = 'savings';
+        for (const opt of txCategorySelect.options) {
+          if (opt.value === 'Savings Goal Deposit') {
+            txCategorySelect.value = opt.value;
+            break;
+          }
+        }
+      } else if (txTypeSelect.value === 'income') {
+        txClassSelect.value = 'income';
+      } else if (txTypeSelect.value === 'expense' && txClassSelect.value === 'income') {
+        txClassSelect.value = 'need';
+      }
+    });
+  }
+
+  // Goal Movement Form (Deposit & Withdrawal)
   const movementForm = document.getElementById('form-goal-movement');
   if (movementForm) {
     movementForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const submitBtn = movementForm.querySelector('button[type="submit"]');
       const goalId = document.getElementById('movement-goal-id').value;
       const type = document.getElementById('movement-type').value;
-      const amount = document.getElementById('movement-amount').value;
+      const amountVal = document.getElementById('movement-amount').value;
       const note = document.getElementById('movement-note').value;
 
+      if (!amountVal || isNaN(Number(amountVal)) || Number(amountVal) <= 0) {
+        showToast('Please enter a valid amount greater than zero.', 'error');
+        return;
+      }
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Processing movement...';
+      }
+
+      const movementId = `mvt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const payload = { id: movementId, amount: amountVal, type, note };
+
       try {
-        await api.goals.movement(goalId, { amount, type, note });
+        if (window.navigator.onLine) {
+          await api.goals.movement(goalId, payload);
+        } else {
+          // Offline handling: update local goal state and queue offline action
+          const localGoal = await getLocalGoal(goalId);
+          if (localGoal) {
+            const amountPaise = rupeesToPaise(amountVal);
+            const delta = type === 'withdrawal' ? -amountPaise : amountPaise;
+            if (type === 'withdrawal' && amountPaise > localGoal.current_saved_paise) {
+              throw new Error(`Cannot withdraw more than current saved amount (₹${(localGoal.current_saved_paise / 100).toFixed(2)}).`);
+            }
+            localGoal.current_saved_paise = Math.max(0, localGoal.current_saved_paise + delta);
+            localGoal.status = localGoal.current_saved_paise >= localGoal.target_amount_paise ? 'completed' : 'active';
+            await saveLocalGoal(localGoal);
+          }
+          await queueOfflineAction('goal_movement', 'create', movementId, { goal_id: goalId, ...payload });
+        }
+
         closeModal('modal-goal-movement');
         movementForm.reset();
-        showToast(type === 'deposit' ? 'Goal deposit recorded!' : 'Withdrawal recorded!', 'success');
-        loadGoals();
-        loadDashboard();
+        const formattedAmount = `₹${Number(amountVal).toFixed(2)}`;
+        showToast(
+          type === 'deposit'
+            ? `Successfully deposited ${formattedAmount} into savings goal!`
+            : `Successfully withdrew ${formattedAmount} from savings goal!`,
+          'success'
+        );
+
+        await loadGoals();
+        await loadDashboard();
+        if (activeView === 'budgets') await loadBudgets();
+        if (activeView === 'transactions') await loadTransactions();
       } catch (err) {
         showToast(err.message, 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Confirm Movement';
+        }
       }
     });
   }
