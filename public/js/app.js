@@ -30,19 +30,75 @@ import { synchronize, subscribeSyncState, queueOfflineAction, updatePendingCount
 import { renderSpendingTrendChart, renderCategoryDistributionChart } from './charts.js';
 import { showToast, openModal, closeModal, getStatusBadgeHtml } from './ui.js';
 
-let activeView = 'dashboard';
+let activeView = 'auth';
 let currentPeriod = getCurrentPeriod();
 let cachedCategories = [];
 let cachedGoals = [];
 let pending2faTempToken = null;
 
 /**
+ * Update authenticated layout visibility (sidebar navigation, topbar controls, profile)
+ */
+export function updateAuthLayout(isAuthenticated) {
+  if (typeof document === 'undefined') return;
+
+  if (isAuthenticated) {
+    document.body.classList.add('is-authenticated');
+    document.body.classList.remove('not-authenticated');
+  } else {
+    document.body.classList.add('not-authenticated');
+    document.body.classList.remove('is-authenticated');
+  }
+
+  // Sidebar navigation visibility
+  const sidebarNav = document.querySelector('.sidebar-nav');
+  if (sidebarNav) {
+    sidebarNav.style.display = isAuthenticated ? 'flex' : 'none';
+  }
+
+  // Sidebar user profile badge and logout button
+  const userBadge = document.getElementById('user-profile-badge');
+  if (userBadge) {
+    userBadge.style.display = isAuthenticated ? 'flex' : 'none';
+  }
+
+  const logoutBtns = document.querySelectorAll('.btn-logout');
+  logoutBtns.forEach(btn => {
+    btn.style.display = isAuthenticated ? 'block' : 'none';
+  });
+
+  // Topbar action controls (month picker, sync indicator, add transaction)
+  const topbarRight = document.querySelector('.topbar-right');
+  if (topbarRight) {
+    topbarRight.style.display = isAuthenticated ? 'flex' : 'none';
+  }
+
+  // Mobile navigation
+  const mobileNav = document.querySelector('.mobile-nav');
+  if (mobileNav) {
+    if (!isAuthenticated) {
+      mobileNav.style.display = 'none';
+    } else {
+      mobileNav.style.display = '';
+    }
+  }
+
+  // Topbar title default when unauthenticated
+  const titleEl = document.getElementById('topbar-title');
+  if (titleEl && !isAuthenticated) {
+    titleEl.textContent = 'Welcome to SmartPocket';
+  }
+}
+
+/**
  * Switch Active View
  */
 export function navigateTo(viewName) {
   const user = getCurrentUser();
-  if (!user && viewName !== 'auth' && viewName !== 'welcome') {
-    showToast('Please sign in to access your finances.', 'info');
+  if (!user && viewName !== 'auth') {
+    if (viewName !== 'welcome' && viewName !== 'loading') {
+      showToast('Please sign in to access your finances.', 'info');
+    }
     viewName = 'auth';
   }
 
@@ -61,6 +117,7 @@ export function navigateTo(viewName) {
 
   // Update Topbar title
   const titles = {
+    loading: 'Loading SmartPocket...',
     welcome: 'Welcome to SmartPocket',
     auth: 'Sign In / Register',
     dashboard: 'Financial Dashboard',
@@ -71,7 +128,9 @@ export function navigateTo(viewName) {
     security: 'Security & 2FA Settings'
   };
   const titleEl = document.getElementById('topbar-title');
-  if (titleEl) titleEl.textContent = titles[viewName] || 'SmartPocket';
+  if (titleEl) {
+    titleEl.textContent = (!user && viewName === 'auth') ? 'Welcome to SmartPocket' : (titles[viewName] || 'SmartPocket');
+  }
 
   // Load view-specific data
   if (user) {
@@ -796,6 +855,13 @@ export function showAuthTab(tab) {
   const formRegister = document.getElementById('form-register');
   const tabLogin = document.getElementById('tab-login');
   const tabRegister = document.getElementById('tab-register');
+  const loginErr = document.getElementById('login-error-msg');
+  const regErr = document.getElementById('reg-error-msg');
+  const regSuccess = document.getElementById('reg-success-msg');
+
+  if (loginErr) { loginErr.style.display = 'none'; loginErr.textContent = ''; }
+  if (regErr) { regErr.style.display = 'none'; regErr.textContent = ''; }
+  if (regSuccess) { regSuccess.style.display = 'none'; regSuccess.textContent = ''; }
 
   if (tab === 'login') {
     if (formLogin) formLogin.style.display = 'block';
@@ -834,11 +900,13 @@ export async function loginDemoUser() {
       password: 'Password123!'
     });
     setCurrentUser(res.user);
+    updateAuthLayout(true);
     updateUserBadges(res.user);
     showToast('Welcome, Aarav! (Demo Account Active)', 'success');
     navigateTo('dashboard');
+    synchronize();
   } catch (err) {
-    showToast('Demo sign-in failed: ' + err.message, 'error');
+    showToast('Demo sign-in failed: ' + (err.data?.error || err.message), 'error');
   }
 }
 window.loginDemoUser = loginDemoUser;
@@ -849,6 +917,7 @@ window.loginDemoUser = loginDemoUser;
 window.SmartPocket = {
   navigateTo,
   showAuthTab,
+  updateAuthLayout,
   loginDemoUser,
   openAddTransactionModal: () => {
     const user = getCurrentUser();
@@ -1005,6 +1074,20 @@ function setupEventHandlers() {
       showAuthTab('register');
     });
   }
+  const linkGotoReg = document.getElementById('link-goto-register');
+  if (linkGotoReg) {
+    linkGotoReg.addEventListener('click', (e) => {
+      e.preventDefault();
+      showAuthTab('register');
+    });
+  }
+  const linkGotoLogin = document.getElementById('link-goto-login');
+  if (linkGotoLogin) {
+    linkGotoLogin.addEventListener('click', (e) => {
+      e.preventDefault();
+      showAuthTab('login');
+    });
+  }
 
   // Quick Demo Login buttons
   document.querySelectorAll('.btn-demo-login').forEach(btn => {
@@ -1035,18 +1118,72 @@ function setupEventHandlers() {
   if (regForm) {
     regForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const email = document.getElementById('reg-email').value;
-      const password = document.getElementById('reg-password').value;
-      const fullName = document.getElementById('reg-name').value;
+      const emailInput = document.getElementById('reg-email');
+      const passwordInput = document.getElementById('reg-password');
+      const nameInput = document.getElementById('reg-name');
+      const regError = document.getElementById('reg-error-msg');
+      const regSuccess = document.getElementById('reg-success-msg');
+      const submitBtn = document.getElementById('btn-register-submit') || regForm.querySelector('button[type="submit"]');
+
+      if (regError) { regError.style.display = 'none'; regError.textContent = ''; }
+      if (regSuccess) { regSuccess.style.display = 'none'; regSuccess.textContent = ''; }
+
+      const email = emailInput ? emailInput.value.trim() : '';
+      const password = passwordInput ? passwordInput.value : '';
+      const fullName = nameInput ? nameInput.value.trim() : '';
+
+      // Client-side validations
+      if (!fullName || fullName.length < 2) {
+        const msg = 'Full name is required (at least 2 characters).';
+        if (regError) { regError.textContent = msg; regError.style.display = 'block'; }
+        showToast(msg, 'error');
+        if (nameInput) nameInput.focus();
+        return;
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!email || !emailRegex.test(email)) {
+        const msg = 'Please enter a valid email address.';
+        if (regError) { regError.textContent = msg; regError.style.display = 'block'; }
+        showToast(msg, 'error');
+        if (emailInput) emailInput.focus();
+        return;
+      }
+
+      if (!password || password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+        const msg = 'Password must be at least 8 characters long and contain both letters and numbers.';
+        if (regError) { regError.textContent = msg; regError.style.display = 'block'; }
+        showToast(msg, 'error');
+        if (passwordInput) passwordInput.focus();
+        return;
+      }
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Creating Account...';
+      }
 
       try {
         const res = await api.auth.register({ email, password, fullName });
         setCurrentUser(res.user);
+        updateAuthLayout(true);
         updateUserBadges(res.user);
-        showToast('Welcome to SmartPocket!', 'success');
+        showToast('Account created! Welcome to SmartPocket.', 'success');
+        regForm.reset();
         navigateTo('dashboard');
+        synchronize();
       } catch (err) {
-        showToast(err.message, 'error');
+        const msg = err.data?.error || err.message || 'Registration failed. Please try again.';
+        if (regError) {
+          regError.textContent = msg;
+          regError.style.display = 'block';
+        }
+        showToast(msg, 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Create Account';
+        }
       }
     });
   }
@@ -1056,8 +1193,27 @@ function setupEventHandlers() {
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const email = document.getElementById('login-email').value;
-      const password = document.getElementById('login-password').value;
+      const emailInput = document.getElementById('login-email');
+      const passwordInput = document.getElementById('login-password');
+      const loginError = document.getElementById('login-error-msg');
+      const submitBtn = document.getElementById('btn-login-submit') || loginForm.querySelector('button[type="submit"]');
+
+      if (loginError) { loginError.style.display = 'none'; loginError.textContent = ''; }
+
+      const email = emailInput ? emailInput.value.trim() : '';
+      const password = passwordInput ? passwordInput.value : '';
+
+      if (!email || !password) {
+        const msg = 'Email and password are required.';
+        if (loginError) { loginError.textContent = msg; loginError.style.display = 'block'; }
+        showToast(msg, 'error');
+        return;
+      }
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing In...';
+      }
 
       try {
         const res = await api.auth.login({ email, password });
@@ -1070,11 +1226,24 @@ function setupEventHandlers() {
         }
 
         setCurrentUser(res.user);
+        updateAuthLayout(true);
         updateUserBadges(res.user);
         showToast('Signed in successfully.', 'success');
+        loginForm.reset();
         navigateTo('dashboard');
+        synchronize();
       } catch (err) {
-        showToast(err.message, 'error');
+        const msg = err.data?.error || err.message || 'Invalid email or password.';
+        if (loginError) {
+          loginError.textContent = msg;
+          loginError.style.display = 'block';
+        }
+        showToast(msg, 'error');
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign In';
+        }
       }
     });
   }
@@ -1089,11 +1258,13 @@ function setupEventHandlers() {
       try {
         const res = await api.auth.verify2fa({ tempToken: pending2faTempToken, token });
         setCurrentUser(res.user);
+        updateAuthLayout(true);
         updateUserBadges(res.user);
         showToast('Authenticated with 2FA!', 'success');
         navigateTo('dashboard');
+        synchronize();
       } catch (err) {
-        showToast(err.message, 'error');
+        showToast(err.data?.error || err.message, 'error');
       }
     });
   }
@@ -1103,10 +1274,22 @@ function setupEventHandlers() {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
       await logoutUser();
-      showToast('Signed out.', 'info');
+      updateAuthLayout(false);
       updateUserBadges(null);
-      navigateTo('welcome');
+      showAuthTab('login');
+      navigateTo('auth');
+      showToast('Signed out.', 'info');
     });
+  });
+
+  // Global Session Expiry Handler
+  window.addEventListener('smartpocket:unauthorized', async () => {
+    await logoutUser();
+    updateAuthLayout(false);
+    updateUserBadges(null);
+    showAuthTab('login');
+    navigateTo('auth');
+    showToast('Your session has expired. Please sign in again.', 'warning');
   });
 
   // Add Transaction Form
@@ -1546,6 +1729,7 @@ subscribeSyncState((state) => {
  * Bootstrap Application
  */
 async function initApp() {
+  updateAuthLayout(false);
   setupEventHandlers();
 
   // Register Service Worker
@@ -1555,14 +1739,18 @@ async function initApp() {
     } catch (_) {}
   }
 
-  // Check auth
+  // Check auth with backend session
   const user = await checkAuth();
   if (user) {
+    updateAuthLayout(true);
     updateUserBadges(user);
     navigateTo('dashboard');
     synchronize();
   } else {
-    navigateTo('welcome');
+    updateAuthLayout(false);
+    updateUserBadges(null);
+    navigateTo('auth');
+    showAuthTab('login');
   }
 }
 

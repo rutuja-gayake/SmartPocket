@@ -25,6 +25,13 @@ export const api = {
         const error = new Error(errorMsg);
         error.status = response.status;
         error.data = data;
+
+        if (response.status === 401 && !endpoint.includes('/api/auth/')) {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('smartpocket:unauthorized'));
+          }
+        }
+
         throw error;
       }
 

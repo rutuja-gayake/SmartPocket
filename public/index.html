@@ -27,8 +27,8 @@
         </div>
       </div>
 
-      <nav class="sidebar-nav">
-        <button class="nav-item active" data-view="dashboard">
+      <nav class="sidebar-nav" style="display:none;">
+        <button class="nav-item" data-view="dashboard">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
           Dashboard
         </button>
@@ -62,7 +62,7 @@
             <div class="user-email" id="user-email-label">student@college.edu</div>
           </div>
         </div>
-        <button class="btn btn-secondary btn-sm btn-logout" style="width:100%;">Sign Out</button>
+        <button class="btn btn-secondary btn-sm btn-logout" style="width:100%; display:none;">Sign Out</button>
       </div>
     </aside>
 
@@ -71,9 +71,9 @@
       <!-- Top Bar -->
       <header class="topbar">
         <div class="topbar-left">
-          <h1 class="view-heading" id="topbar-title">Financial Dashboard</h1>
+          <h1 class="view-heading" id="topbar-title">Welcome to SmartPocket</h1>
         </div>
-        <div class="topbar-right">
+        <div class="topbar-right" style="display:none;">
           <!-- Month/Period Selector -->
           <div style="display:flex; align-items:center; gap:6px;">
             <label for="global-period-select" style="font-size:0.8rem; color:var(--color-text-muted); font-weight:600;">Month:</label>
@@ -91,8 +91,17 @@
       </header>
 
       <main class="content-body">
+        <!-- VIEW: AUTH / APP LOADING STATE -->
+        <section id="view-loading" class="view-section active" style="text-align: center; padding: 60px 20px;">
+          <div style="display: inline-block; padding: 32px; max-width: 400px; width: 100%;">
+            <div class="auth-loading-spinner" style="width: 42px; height: 42px; border: 3px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; margin: 0 auto 16px; animation: spin 0.8s linear infinite;"></div>
+            <div style="font-weight: 600; font-size: 1.05rem; color: var(--color-text-main); margin-bottom: 6px;">Verifying Session...</div>
+            <div style="font-size: 0.85rem; color: var(--color-text-muted);">Securing your SmartPocket wallet</div>
+          </div>
+        </section>
+
         <!-- VIEW: WELCOME & ONBOARDING -->
-        <section id="view-welcome" class="view-section active">
+        <section id="view-welcome" class="view-section">
           <div style="max-width: 720px; margin: 40px auto; text-align: center;">
             <img src="/assets/icons/icon.svg" alt="SmartPocket" style="width: 72px; height: 72px; margin-bottom: 24px; border-radius: 16px;">
             <h2 style="font-size: 2.25rem; font-weight: 800; color: var(--color-primary); margin-bottom: 16px;">Pocket Money & Savings, Solved.</h2>
@@ -137,6 +146,7 @@
 
               <!-- Login Form -->
               <form id="form-login">
+                <div id="login-error-msg" class="form-error" style="display:none; color:var(--color-danger, #ef4444); background:rgba(239, 68, 68, 0.1); border:1px solid rgba(239, 68, 68, 0.3); padding:8px 12px; border-radius:6px; margin-bottom:12px; font-size:0.85rem;"></div>
                 <div class="form-group">
                   <label class="form-label" for="login-email">College / Personal Email</label>
                   <input type="email" id="login-email" class="form-control" required placeholder="you@student.edu">
@@ -145,7 +155,11 @@
                   <label class="form-label" for="login-password">Password</label>
                   <input type="password" id="login-password" class="form-control" required placeholder="••••••••">
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">Sign In</button>
+                <button type="submit" id="btn-login-submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">Sign In</button>
+
+                <div style="margin-top: 14px; text-align: center; font-size: 0.85rem; color: var(--color-text-muted);">
+                  Don't have an account? <a href="#" id="link-goto-register" style="color: var(--color-primary); font-weight: 600; text-decoration: none;">Create an account</a>
+                </div>
 
                 <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border); text-align: center;">
                   <button type="button" class="btn btn-secondary btn-sm btn-demo-login" onclick="window.SmartPocket.loginDemoUser()" style="width: 100%;">
@@ -156,6 +170,8 @@
 
               <!-- Register Form -->
               <form id="form-register" style="display: none;">
+                <div id="reg-error-msg" class="form-error" style="display:none; color:var(--color-danger, #ef4444); background:rgba(239, 68, 68, 0.1); border:1px solid rgba(239, 68, 68, 0.3); padding:8px 12px; border-radius:6px; margin-bottom:12px; font-size:0.85rem;"></div>
+                <div id="reg-success-msg" class="form-success" style="display:none; color:var(--color-success, #10b981); background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); padding:8px 12px; border-radius:6px; margin-bottom:12px; font-size:0.85rem;"></div>
                 <div class="form-group">
                   <label class="form-label" for="reg-name">Full Name</label>
                   <input type="text" id="reg-name" class="form-control" required placeholder="Aarav Sharma">
@@ -168,7 +184,11 @@
                   <label class="form-label" for="reg-password">Password (8+ chars, letters & numbers)</label>
                   <input type="password" id="reg-password" class="form-control" required placeholder="••••••••">
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">Create Account</button>
+                <button type="submit" id="btn-register-submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">Create Account</button>
+
+                <div style="margin-top: 14px; text-align: center; font-size: 0.85rem; color: var(--color-text-muted);">
+                  Already have an account? <a href="#" id="link-goto-login" style="color: var(--color-primary); font-weight: 600; text-decoration: none;">Sign In</a>
+                </div>
               </form>
             </div>
 
@@ -186,7 +206,7 @@
         </section>
 
         <!-- VIEW: MAIN DASHBOARD -->
-        <section id="view-dashboard" class="view-section active">
+        <section id="view-dashboard" class="view-section">
           <!-- Safe Daily Spending Highlight Banner -->
           <div class="safe-daily-banner">
             <div>
@@ -519,8 +539,8 @@
       </main>
 
       <!-- Mobile Bottom Navigation Bar -->
-      <nav class="mobile-nav">
-        <button class="mobile-nav-item active" data-view="dashboard">
+      <nav class="mobile-nav" style="display:none;">
+        <button class="mobile-nav-item" data-view="dashboard">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
           Home
         </button>
