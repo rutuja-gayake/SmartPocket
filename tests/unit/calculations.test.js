@@ -116,3 +116,4 @@ test('Financial Calculations - Savings Goal Progress', () => {
   assert.ok(progress.suggestedWeeklyPaise > 0);
   assert.ok(progress.suggestedMonthlyPaise > 0);
 });
+

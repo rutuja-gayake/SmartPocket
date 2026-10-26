@@ -149,3 +149,4 @@ export const DEFAULT_CATEGORIES = [
   // Savings (20%)
   { id: 'cat_save_goal', name: 'Savings Goal Deposit', type: 'savings', icon: 'piggy-bank', color: '#10B981' }
 ];
+

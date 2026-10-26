@@ -254,3 +254,4 @@ export function calculateGoalProgress(goal, currentDate = new Date()) {
     daysRemaining
   };
 }
+

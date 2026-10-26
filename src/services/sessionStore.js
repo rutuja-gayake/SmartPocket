@@ -79,3 +79,4 @@ export function cleanupExpiredSessions() {
   const now = new Date().toISOString();
   db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now);
 }
+

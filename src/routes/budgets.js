@@ -168,3 +168,4 @@ budgetsRouter.put('/:period', requireAuth, (req, res) => {
     return res.status(500).json({ error: 'Failed to update budget.' });
   }
 });
+

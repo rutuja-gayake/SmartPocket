@@ -220,3 +220,4 @@ $$\text{Safe Daily Allowance} = \max\left(0, \frac{\min(\text{Available Balance}
 
 ## License
 MIT License. Built for students to manage pocket money and build lasting financial habits.
+

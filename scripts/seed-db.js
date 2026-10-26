@@ -96,3 +96,4 @@ console.log(`Password: ${demoPassword}`);
 console.log('----------------------------------------------------');
 
 closeDb();
+

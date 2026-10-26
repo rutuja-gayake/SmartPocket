@@ -175,3 +175,4 @@ export function getUserTotpSecret(userId) {
   if (!user || !user.totp_secret_encrypted) return null;
   return decryptText(user.totp_secret_encrypted);
 }
+

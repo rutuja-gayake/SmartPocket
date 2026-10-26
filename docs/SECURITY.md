@@ -43,3 +43,4 @@ SmartPocket is engineered with student financial privacy and security as primary
 - `X-Content-Type-Options: nosniff`: Prevents MIME-sniffing.
 - `Referrer-Policy: strict-origin-when-cross-origin`.
 - Rate limiting middleware restricts login and registration attempts to 30 requests per 15 minutes per IP address.
+

@@ -116,3 +116,4 @@ advisorRouter.post('/query', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to process financial advisor query.' });
   }
 });
+

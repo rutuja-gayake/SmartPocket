@@ -63,3 +63,4 @@ export function formatRupeesPlain(paise) {
   const rupees = paiseToRupees(paise);
   return rupees.toFixed(2);
 }
+

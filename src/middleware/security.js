@@ -26,3 +26,4 @@ export function setSecurityHeaders(req, res, next) {
 
   next();
 }
+

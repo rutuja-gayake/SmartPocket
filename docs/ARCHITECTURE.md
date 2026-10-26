@@ -66,3 +66,4 @@ All monetary values in calculations, API payloads, IndexedDB, and SQLite tables 
 - Passwords are encrypted with `bcryptjs` (work factor 12).
 - Two-Factor Authentication uses RFC 6238 TOTP with AES-256-GCM encryption of secret keys at rest.
 - Single-use backup recovery codes are stored hashed in `recovery_codes`.
+

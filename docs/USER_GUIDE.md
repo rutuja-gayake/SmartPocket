@@ -89,3 +89,4 @@ On mobile (Chrome on Android or Safari on iOS):
 1. Tap the browser menu (`⋮` or Share icon).
 2. Tap **Add to Home screen** / **Install App**.
 3. SmartPocket will open in a full-screen native app experience and work even with airplane mode enabled!
+

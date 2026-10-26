@@ -364,3 +364,4 @@ authRouter.post('/2fa/disable', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to disable 2FA.' });
   }
 });
+

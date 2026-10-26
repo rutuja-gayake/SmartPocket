@@ -205,3 +205,4 @@ export function calculateGoalProgress(goal, currentDate = new Date()) {
 
   return { progressPct, remainingPaise, isCompleted, suggestedWeeklyPaise };
 }
+

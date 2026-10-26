@@ -262,3 +262,4 @@ goalsRouter.post('/:id/movements', requireAuth, (req, res) => {
     return res.status(500).json({ error: 'Failed to record savings movement.' });
   }
 });
+

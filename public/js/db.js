@@ -167,3 +167,4 @@ export async function clearUserData() {
     tx.onerror = () => reject(tx.error);
   });
 }
+

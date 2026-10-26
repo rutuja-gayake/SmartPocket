@@ -249,6 +249,43 @@ Rely strictly on the provided anonymized financial numbers:
 Keep replies under 3-4 sentences.
 `;
 
+  if (config.ai.provider === 'groq' || config.ai.provider === 'openai') {
+    const endpoint = config.ai.provider === 'groq'
+      ? 'https://api.groq.com/openai/v1/chat/completions'
+      : 'https://api.openai.com/v1/chat/completions';
+
+    const defaultModel = config.ai.provider === 'groq' ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini';
+    const model = config.ai.model || defaultModel;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.ai.apiKey.trim()}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemInstructions.trim() },
+          { role: 'user', content: `Student question: ${prompt.trim()}` }
+        ],
+        temperature: 0.6,
+        max_tokens: 300
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Cloud AI provider (${config.ai.provider}) returned HTTP ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    const candidateText = data.choices?.[0]?.message?.content;
+    if (!candidateText) throw new Error('Empty response from AI provider');
+
+    return candidateText.trim();
+  }
+
   if (config.ai.provider === 'gemini') {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${config.ai.model}:generateContent?key=${config.ai.apiKey}`;
     const response = await fetch(url, {
@@ -274,3 +311,4 @@ Keep replies under 3-4 sentences.
 
   throw new Error(`Unsupported AI provider: ${config.ai.provider}`);
 }
+

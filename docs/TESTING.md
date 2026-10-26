@@ -60,3 +60,4 @@ npm run test:integration
 - Simulates real TOTP codes using `otpauth`.
 - Enrolls and verifies 6-digit codes.
 - Verifies backup recovery code generation, single-use consumption, and secure deletion.
+

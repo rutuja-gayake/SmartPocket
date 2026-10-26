@@ -36,3 +36,4 @@ export async function logoutUser() {
   await clearUserData();
   localStorage.removeItem('smartpocket_last_sync');
 }
+

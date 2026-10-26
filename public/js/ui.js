@@ -53,3 +53,4 @@ export function getStatusBadgeHtml(status) {
   const item = statusLabels[status] || { text: status, class: 'no_budget' };
   return `<span class="status-badge ${item.class}">${item.text}</span>`;
 }
+

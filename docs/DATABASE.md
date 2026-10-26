@@ -106,3 +106,4 @@ Audit trail of deposits and withdrawals for goals.
 ## 3. Database Management Commands
 - `npm run db:init`: Creates directories, tables, indexes, and default categories.
 - `npm run db:seed`: Seeds demo user (`student@example.edu` / `Password123!`), realistic student transactions, monthly budget, and savings goals.
+

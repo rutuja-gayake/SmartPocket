@@ -144,3 +144,4 @@ window.addEventListener('offline', () => {
   syncState.status = 'offline';
   notify();
 });
+

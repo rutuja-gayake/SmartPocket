@@ -11,3 +11,4 @@ try {
 } finally {
   closeDb();
 }
+

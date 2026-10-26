@@ -26,8 +26,9 @@ export const config = {
     bcryptWorkFactor: 12
   },
   ai: {
-    provider: process.env.AI_PROVIDER || 'none', // 'none' | 'gemini' | 'openai'
+    provider: (process.env.AI_PROVIDER || 'none').toLowerCase(), // 'none' | 'groq' | 'gemini' | 'openai'
     apiKey: process.env.AI_API_KEY || '',
-    model: process.env.AI_MODEL || 'gemini-1.5-flash'
+    model: process.env.AI_MODEL || (process.env.AI_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'gemini-1.5-flash')
   }
 };
+
