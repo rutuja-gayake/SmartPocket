@@ -270,7 +270,7 @@ Keep replies under 3-4 sentences.
           { role: 'user', content: `Student question: ${prompt.trim()}` }
         ],
         temperature: 0.6,
-        max_tokens: 300
+        max_tokens: 500
       })
     });
 
