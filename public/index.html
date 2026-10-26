@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartPocket — Student Budget & Savings Advisor</title>
+  <meta name="description" content="Offline-first student pocket money manager, safe daily spending calculator, and financial advisor.">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/assets/icons/icon.svg">
+  <meta name="theme-color" content="#173F35">
+
+  <link rel="stylesheet" href="/css/theme.css">
+  <link rel="stylesheet" href="/css/main.css">
+
+  <!-- Vendored Local Chart.js for 100% Offline Capability -->
+  <script src="/assets/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Desktop Persistent Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <img src="/assets/icons/icon.svg" alt="SmartPocket" class="brand-icon">
+        <div>
+          <div class="brand-title">SmartPocket</div>
+          <div class="brand-subtitle">Student Advisor</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          Dashboard
+        </button>
+        <button class="nav-item" data-view="transactions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v5h5"/><path d="m9 14 2 2 4-4"/></svg>
+          Transactions
+        </button>
+        <button class="nav-item" data-view="budgets">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+          Budgets & 50/30/20
+        </button>
+        <button class="nav-item" data-view="goals">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          Savings Goals
+        </button>
+        <button class="nav-item" data-view="advisor">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a8 8 0 0 0-8 8c0 3 2 5.5 5 7v3h6v-3c3-1.5 5-4 5-7a8 8 0 0 0-8-8z"/><path d="M9 22h6"/></svg>
+          Pocket AI Advisor
+        </button>
+        <button class="nav-item" data-view="security">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Security & 2FA
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div id="user-profile-badge" class="user-profile-badge" style="display:none;">
+          <div class="avatar" id="user-avatar-initial">S</div>
+          <div class="user-info">
+            <div class="user-name" id="user-name-label">Student</div>
+            <div class="user-email" id="user-email-label">student@college.edu</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm btn-logout" style="width:100%;">Sign Out</button>
+      </div>
+    </aside>
+
+    <!-- Main Content Container -->
+    <div class="main-wrapper">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 class="view-heading" id="topbar-title">Financial Dashboard</h1>
+        </div>
+        <div class="topbar-right">
+          <!-- Offline / Synchronization Indicator Pill -->
+          <div id="sync-status-pill" class="sync-pill" onclick="window.SmartPocket.triggerManualSync()" title="Click to synchronize changes">
+            <span class="sync-dot"></span>
+            <span id="sync-status-label">Online • Synced</span>
+          </div>
+
+          <button class="btn btn-primary btn-sm" onclick="window.SmartPocket.openAddTransactionModal()">+ Add Transaction</button>
+        </div>
+      </header>
+
+      <main class="content-body">
+        <!-- VIEW: WELCOME & ONBOARDING -->
+        <section id="view-welcome" class="view-section">
+          <div style="max-width: 720px; margin: 40px auto; text-align: center;">
+            <img src="/assets/icons/icon.svg" alt="SmartPocket" style="width: 72px; height: 72px; margin-bottom: 24px; border-radius: 16px;">
+            <h2 style="font-size: 2.25rem; font-weight: 800; color: var(--color-primary); margin-bottom: 16px;">Pocket Money & Savings, Solved.</h2>
+            <p style="font-size: 1.15rem; margin-bottom: 32px; color: var(--color-text-muted);">
+              SmartPocket helps college students answer five questions every single day:
+            </p>
+
+            <div class="grid-cards-3" style="text-align: left; margin-bottom: 36px;">
+              <div class="card">
+                <h4 style="color:var(--color-primary); margin-bottom: 6px;">1. Safe Daily Spend</h4>
+                <p style="font-size: 0.88rem;">Know exactly how much pocket money you can spend today without running broke before month-end.</p>
+              </div>
+              <div class="card">
+                <h4 style="color:var(--color-primary); margin-bottom: 6px;">2. 50/30/20 Rule</h4>
+                <p style="font-size: 0.88rem;">Keep essential needs at 50%, discretionary wants under 30%, and save 20% consistently.</p>
+              </div>
+              <div class="card">
+                <h4 style="color:var(--color-primary); margin-bottom: 6px;">3. 100% Offline PWA</h4>
+                <p style="font-size: 0.88rem;">Works seamlessly in your college basement or offline mess. Synchronizes whenever connectivity returns.</p>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: center; gap: 16px;">
+              <button class="btn btn-primary" data-view="auth">Get Started / Sign In</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW: AUTHENTICATION (SIGN IN & REGISTER) -->
+        <section id="view-auth" class="view-section">
+          <div class="card" style="max-width: 440px; margin: 40px auto;">
+            <div id="login-credentials-section">
+              <h2 style="font-size: 1.4rem; margin-bottom: 4px;">Welcome to SmartPocket</h2>
+              <p style="font-size: 0.88rem; margin-bottom: 20px;">Manage your student allowance responsibly.</p>
+
+              <!-- Tabs -->
+              <div style="display: flex; border-bottom: 1px solid var(--color-border); margin-bottom: 20px;">
+                <button id="tab-login" class="btn btn-secondary" style="flex:1; border-radius:0; border:none; border-bottom: 2px solid var(--color-primary);" onclick="showAuthTab('login')">Sign In</button>
+                <button id="tab-register" class="btn btn-secondary" style="flex:1; border-radius:0; border:none;" onclick="showAuthTab('register')">Register</button>
+              </div>
+
+              <!-- Login Form -->
+              <form id="form-login">
+                <div class="form-group">
+                  <label class="form-label" for="login-email">College / Personal Email</label>
+                  <input type="email" id="login-email" class="form-control" required placeholder="you@student.edu">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="login-password">Password</label>
+                  <input type="password" id="login-password" class="form-control" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">Sign In</button>
+              </form>
+
+              <!-- Register Form -->
+              <form id="form-register" style="display: none;">
+                <div class="form-group">
+                  <label class="form-label" for="reg-name">Full Name</label>
+                  <input type="text" id="reg-name" class="form-control" required placeholder="Aarav Sharma">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="reg-email">Email Address</label>
+                  <input type="email" id="reg-email" class="form-control" required placeholder="you@student.edu">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="reg-password">Password (8+ chars, letters & numbers)</label>
+                  <input type="password" id="reg-password" class="form-control" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 12px;">Create Account</button>
+              </form>
+            </div>
+
+            <!-- 2FA Prompt during login -->
+            <div id="login-2fa-section" style="display: none;">
+              <h2 style="font-size: 1.3rem; margin-bottom: 8px;">Two-Factor Verification</h2>
+              <p style="font-size: 0.88rem; margin-bottom: 20px;">Open your authenticator app (Google Authenticator, Authy) and enter your 6-digit code.</p>
+              <div class="form-group">
+                <label class="form-label" for="login-2fa-code">Authenticator Code</label>
+                <input type="text" id="login-2fa-code" class="form-control" maxlength="8" placeholder="123456" style="font-size: 1.4rem; letter-spacing: 0.2em; text-align: center;">
+              </div>
+              <button id="btn-verify-2fa-login" class="btn btn-primary" style="width: 100%; margin-top: 8px;">Verify & Sign In</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW: MAIN DASHBOARD -->
+        <section id="view-dashboard" class="view-section active">
+          <!-- Safe Daily Spending Highlight Banner -->
+          <div class="safe-daily-banner">
+            <div>
+              <h2>Safe Daily Spending Allowance</h2>
+              <div class="safe-daily-figure" id="dash-safe-daily">₹0.00</div>
+              <div class="safe-daily-desc" id="dash-safe-daily-desc">Loading your safe spending pace...</div>
+            </div>
+            <div id="dash-safe-status-badge">
+              <span class="status-badge healthy">Healthy</span>
+            </div>
+          </div>
+
+          <!-- Top 4 Summary Cards -->
+          <div class="grid-cards-3">
+            <div class="card">
+              <div class="card-title">Available Pocket Cash</div>
+              <div class="card-value" id="dash-available-balance">₹0.00</div>
+              <div class="card-subtext">Current spendable funds</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Monthly Allowance / Income</div>
+              <div class="card-value" id="dash-income" style="color:var(--color-savings);">₹0.00</div>
+              <div class="card-subtext">Received this month</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Total Spending</div>
+              <div class="card-value" id="dash-expense" style="color:var(--color-primary);">₹0.00</div>
+              <div class="card-subtext">Spent this month</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Monthly Budget</div>
+              <div class="card-value" id="dash-budget-total">₹0.00</div>
+              <div class="card-subtext">Target spending cap</div>
+            </div>
+          </div>
+
+          <!-- 50/30/20 Guideline Card -->
+          <div class="card" style="margin-bottom: var(--space-lg);">
+            <div class="card-title">
+              <span>50/30/20 Student Budget Ratio</span>
+              <button class="btn btn-secondary btn-sm" data-view="budgets">Adjust Guidelines</button>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 12px;">
+              <div>
+                <div style="font-size:0.8rem; color:var(--color-text-muted);">ESSENTIAL NEEDS (50% target)</div>
+                <div style="font-size:1.3rem; font-weight:700; color:var(--color-needs);" id="dash-needs-pct">0%</div>
+                <div style="font-size:0.85rem;" id="dash-needs-amount">₹0.00</div>
+              </div>
+              <div>
+                <div style="font-size:0.8rem; color:var(--color-text-muted);">DISCRETIONARY WANTS (30% target)</div>
+                <div style="font-size:1.3rem; font-weight:700; color:var(--color-wants);" id="dash-wants-pct">0%</div>
+                <div style="font-size:0.85rem;" id="dash-wants-amount">₹0.00</div>
+              </div>
+              <div>
+                <div style="font-size:0.8rem; color:var(--color-text-muted);">SAVINGS ALLOCATION (20% target)</div>
+                <div style="font-size:1.3rem; font-weight:700; color:var(--color-savings);" id="dash-savings-pct">20%</div>
+                <div style="font-size:0.85rem;" id="dash-savings-amount">Tracking active goals</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts Grid -->
+          <div class="grid-cards-2">
+            <div class="card">
+              <div class="card-title">Daily Spending Pace</div>
+              <div style="height: 250px; position: relative;">
+                <canvas id="trend-chart"></canvas>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">Spending by Category</div>
+              <div style="height: 250px; position: relative;">
+                <canvas id="category-chart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Transactions Table -->
+          <div class="card">
+            <div class="card-title">
+              <span>Recent Transactions</span>
+              <button class="btn btn-secondary btn-sm" data-view="transactions">View All History</button>
+            </div>
+            <div class="table-container">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Category & Description</th>
+                    <th>Classification</th>
+                    <th style="text-align:right;">Amount (INR)</th>
+                  </tr>
+                </thead>
+                <tbody id="dash-recent-tx">
+                  <tr><td colspan="4" style="text-align:center; padding: 24px; color: var(--color-text-muted);">Loading transactions...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW: TRANSACTIONS HISTORY & FILTERING -->
+        <section id="view-transactions" class="view-section">
+          <div class="filter-bar">
+            <input type="text" id="tx-search" class="form-control" placeholder="Search by description or category..." style="flex: 2; min-width: 200px;">
+            <select id="tx-filter-type" class="form-control" style="flex: 1; min-width: 130px;">
+              <option value="">All Types</option>
+              <option value="income">Income</option>
+              <option value="expense">Expense</option>
+              <option value="transfer_savings">Savings Transfer</option>
+            </select>
+            <select id="tx-filter-class" class="form-control" style="flex: 1; min-width: 130px;">
+              <option value="">All Classifications</option>
+              <option value="need">Needs (50%)</option>
+              <option value="want">Wants (30%)</option>
+              <option value="savings">Savings (20%)</option>
+              <option value="income">Income</option>
+            </select>
+            <button class="btn btn-primary" onclick="window.SmartPocket.openAddTransactionModal()">+ Add New</button>
+          </div>
+
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Category & Description</th>
+                  <th>Classification</th>
+                  <th>Amount</th>
+                  <th style="text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="tx-table-body">
+                <tr><td colspan="5" style="text-align:center; padding: 24px;">Loading transactions...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- VIEW: BUDGETS & 50/30/20 -->
+        <section id="view-budgets" class="view-section">
+          <div class="card" style="max-width: 600px; margin-bottom: 24px;">
+            <div class="card-title">Monthly Budget Setup</div>
+            <p style="font-size:0.85rem; margin-bottom: 20px;">Configure your spending boundary for the month. SmartPocket uses this to calculate your safe daily spending allowance.</p>
+
+            <form id="form-set-budget">
+              <div class="form-group">
+                <label class="form-label" for="budget-total-input">Total Monthly Spending Budget (₹)</label>
+                <input type="number" step="1" id="budget-total-input" class="form-control" placeholder="e.g. 8000" required>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="budget-needs-pct-input">Needs Target (%)</label>
+                  <input type="number" id="budget-needs-pct-input" class="form-control" value="50">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="budget-wants-pct-input">Wants Target (%)</label>
+                  <input type="number" id="budget-wants-pct-input" class="form-control" value="30">
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="margin-top: 12px;">Save Monthly Budget</button>
+            </form>
+          </div>
+
+          <div class="card" style="max-width: 600px;">
+            <div class="card-title">Safe Daily Spending Calculation Logic</div>
+            <div style="font-size: 0.9rem; line-height: 1.6; color: var(--color-text-muted);">
+              <p>SmartPocket computes your safe daily spending dynamically using the formula:</p>
+              <pre style="background:var(--color-surface-subtle); padding:12px; border-radius:8px; margin: 12px 0; font-family:var(--font-mono); font-size:0.82rem;">Safe Daily = max(0, min(Available Balance, Remaining Budget) / Remaining Days)</pre>
+              <p>Current Safe Daily Spend: <strong style="color:var(--color-primary);" id="budget-safe-daily">₹0.00</strong></p>
+              <p id="budget-safe-msg" style="margin-top: 6px;"></p>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW: SAVINGS GOALS -->
+        <section id="view-goals" class="view-section">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+            <div>
+              <h2 style="font-size:1.3rem;">Your Savings Goals</h2>
+              <p style="font-size:0.85rem;">Save pocket money for semester books, gadgets, or emergency reserves.</p>
+            </div>
+            <button class="btn btn-primary" onclick="window.SmartPocket.openAddGoalModal()">+ New Goal</button>
+          </div>
+
+          <div id="goals-container">
+            <div class="card"><p>Loading goals...</p></div>
+          </div>
+        </section>
+
+        <!-- VIEW: POCKET AI ADVISOR -->
+        <section id="view-advisor" class="view-section">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px;">
+            <div>
+              <h2 style="font-size: 1.3rem;">Pocket AI Advisor</h2>
+              <p style="font-size: 0.85rem;">Instant financial guidance tailored to your pocket money & budget.</p>
+            </div>
+            <label style="display:flex; align-items:center; gap: 8px; font-size: 0.82rem; color: var(--color-text-muted); cursor: pointer;">
+              <input type="checkbox" id="advisor-cloud-toggle">
+              Use Cloud AI (if configured)
+            </label>
+          </div>
+
+          <div class="advisor-chat-container">
+            <div class="advisor-messages" id="advisor-messages">
+              <div class="chat-bubble assistant">
+                Hello! I am your Pocket Financial Advisor. You can ask me questions about your budget, safe daily spending, affordability, or savings milestones!
+              </div>
+            </div>
+
+            <!-- Suggestion Pills -->
+            <div class="advisor-suggestions">
+              <button class="suggestion-pill" onclick="window.SmartPocket.askAdvisor('Can I afford ₹800 shoes?')">Can I afford ₹800 shoes?</button>
+              <button class="suggestion-pill" onclick="window.SmartPocket.askAdvisor('How much can I spend today?')">How much can I spend today?</button>
+              <button class="suggestion-pill" onclick="window.SmartPocket.askAdvisor('Why is my budget running low?')">Why is my budget low?</button>
+              <button class="suggestion-pill" onclick="window.SmartPocket.askAdvisor('Am I spending too much on wants?')">Am I spending too much on wants?</button>
+              <button class="suggestion-pill" onclick="window.SmartPocket.askAdvisor('How much have I spent on food this month?')">Spent on food?</button>
+            </div>
+
+            <div class="advisor-input-bar">
+              <input type="text" id="advisor-input" class="form-control" placeholder="Ask financial question (e.g. 'Can I buy ₹1200 headphones?')">
+              <button id="btn-advisor-send" class="btn btn-primary">Send</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW: SECURITY & 2FA SETTINGS -->
+        <section id="view-security" class="view-section">
+          <div class="card" style="max-width: 600px; margin-bottom: 24px;">
+            <div class="card-title">Two-Factor Authentication (TOTP)</div>
+            <p style="font-size:0.85rem; margin-bottom: 16px;">Protect your student financial data with RFC 6238 TOTP two-factor authentication.</p>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; padding: 12px; background:var(--color-surface-subtle); border-radius:var(--radius-md); margin-bottom: 20px;">
+              <div>
+                <strong>TOTP Authenticator</strong>
+                <div style="font-size:0.8rem; color:var(--color-text-muted);">Google Authenticator, Authy, or 1Password</div>
+              </div>
+              <div id="security-2fa-status"><span class="status-badge no_budget">Disabled</span></div>
+            </div>
+
+            <button id="btn-toggle-2fa" class="btn btn-primary">Enable Two-Factor Authentication</button>
+          </div>
+        </section>
+      </main>
+
+      <!-- Mobile Bottom Navigation Bar -->
+      <nav class="mobile-nav">
+        <button class="mobile-nav-item active" data-view="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          Home
+        </button>
+        <button class="mobile-nav-item" data-view="transactions">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v5h5"/><path d="m9 14 2 2 4-4"/></svg>
+          Tx
+        </button>
+        <button class="mobile-nav-item" data-view="goals">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+          Goals
+        </button>
+        <button class="mobile-nav-item" data-view="advisor">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a8 8 0 0 0-8 8c0 3 2 5.5 5 7v3h6v-3c3-1.5 5-4 5-7a8 8 0 0 0-8-8z"/><path d="M9 22h6"/></svg>
+          Advisor
+        </button>
+        <button class="mobile-nav-item" data-view="security">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Security
+        </button>
+      </nav>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD TRANSACTION -->
+  <div id="modal-add-tx" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Record Transaction</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <form id="form-add-tx">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="tx-amount">Amount (₹)</label>
+            <input type="number" step="0.01" id="tx-amount" class="form-control" required placeholder="150.00">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tx-type">Transaction Type</label>
+            <select id="tx-type" class="form-control" required>
+              <option value="expense">Expense</option>
+              <option value="income">Income / Allowance</option>
+              <option value="transfer_savings">Transfer to Savings</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="tx-classification">50/30/20 Classification</label>
+            <select id="tx-classification" class="form-control" required>
+              <option value="need">Essential Need (50%)</option>
+              <option value="want">Discretionary Want (30%)</option>
+              <option value="savings">Savings (20%)</option>
+              <option value="income">Income</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tx-category-select">Category</label>
+            <select id="tx-category-select" class="form-control" required>
+              <option value="Food & Groceries">Food & Groceries</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="tx-date">Date</label>
+          <input type="date" id="tx-date" class="form-control" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="tx-desc">Description / Note</label>
+          <input type="text" id="tx-desc" class="form-control" placeholder="e.g. Lunch at college canteen">
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top: 12px;">Save Transaction</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD SAVINGS GOAL -->
+  <div id="modal-add-goal" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Create Savings Goal</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <form id="form-add-goal">
+        <div class="form-group">
+          <label class="form-label" for="goal-title">Goal Title</label>
+          <input type="text" id="goal-title" class="form-control" required placeholder="e.g. Semester Books, Laptop Fund">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="goal-target-amount">Target Amount (₹)</label>
+            <input type="number" step="1" id="goal-target-amount" class="form-control" required placeholder="5000">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="goal-target-date">Target Date</label>
+            <input type="date" id="goal-target-date" class="form-control">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="goal-desc">Description (Optional)</label>
+          <input type="text" id="goal-desc" class="form-control" placeholder="Why are you saving for this?">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:12px;">Create Goal</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: GOAL MOVEMENT (DEPOSIT / WITHDRAWAL) -->
+  <div id="modal-goal-movement" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="movement-modal-title">Deposit into Goal</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <form id="form-goal-movement">
+        <input type="hidden" id="movement-goal-id">
+        <input type="hidden" id="movement-type" value="deposit">
+
+        <div class="form-group">
+          <label class="form-label" for="movement-amount">Amount (₹)</label>
+          <input type="number" step="0.01" id="movement-amount" class="form-control" required placeholder="500.00">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="movement-note">Note</label>
+          <input type="text" id="movement-note" class="form-control" placeholder="e.g. Saved from weekly allowance">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; margin-top:12px;">Confirm Movement</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: 2FA ENROLLMENT -->
+  <div id="modal-enroll-2fa" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Enroll Two-Factor Authentication</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div style="text-align:center; margin-bottom: 16px;">
+        <img id="2fa-qr-image" src="" alt="2FA QR Code" style="width: 180px; height: 180px; border-radius: 8px; border: 1px solid var(--color-border); margin: 0 auto 12px;">
+        <p style="font-size:0.82rem; color:var(--color-text-muted);">Scan this QR code in Google Authenticator or Authy</p>
+        <p style="font-size:0.75rem; margin-top: 4px;">Manual Setup Key: <code id="2fa-manual-secret" style="font-weight: bold; color: var(--color-primary);"></code></p>
+      </div>
+      <form id="form-confirm-2fa">
+        <input type="hidden" id="2fa-enrollment-secret">
+        <div class="form-group">
+          <label class="form-label" for="2fa-verify-code">Enter 6-Digit Authenticator Code</label>
+          <input type="text" id="2fa-verify-code" class="form-control" maxlength="6" required placeholder="123456" style="text-align:center; font-size:1.3rem; letter-spacing:0.2em;">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;">Verify & Activate 2FA</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: RECOVERY CODES DISPLAY -->
+  <div id="modal-recovery-codes" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Save Your Backup Recovery Codes</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <p style="font-size:0.85rem; margin-bottom: 12px; color:var(--color-text-muted);">
+        Store these one-time recovery codes in a safe place. If you ever lose your phone or authenticator app, each code can be used once to access your account.
+      </p>
+      <ul id="recovery-codes-list" style="list-style:none; padding:12px; background:var(--color-surface-subtle); border-radius:8px; display:grid; grid-template-columns: 1fr 1fr; gap: 8px; font-family:var(--font-mono); font-size:0.9rem;">
+      </ul>
+      <button class="btn btn-primary" style="width:100%; margin-top: 16px;" data-modal-close>I Have Saved My Recovery Codes</button>
+    </div>
+  </div>
+
+  <script>
+    function showAuthTab(tab) {
+      if (tab === 'login') {
+        document.getElementById('form-login').style.display = 'block';
+        document.getElementById('form-register').style.display = 'none';
+        document.getElementById('tab-login').style.borderBottom = '2px solid var(--color-primary)';
+        document.getElementById('tab-register').style.borderBottom = 'none';
+      } else {
+        document.getElementById('form-login').style.display = 'none';
+        document.getElementById('form-register').style.display = 'block';
+        document.getElementById('tab-login').style.borderBottom = 'none';
+        document.getElementById('tab-register').style.borderBottom = '2px solid var(--color-primary)';
+      }
+    }
+  </script>
+
+  <!-- Main ES Module Application Entrypoint -->
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
