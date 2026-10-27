@@ -90,10 +90,19 @@ export function updateAuthLayout(isAuthenticated) {
   }
 }
 
+function clearSessionWatchdog() {
+  if (typeof window !== 'undefined' && window.__sessionWatchdog) {
+    clearTimeout(window.__sessionWatchdog);
+    window.__sessionWatchdog = null;
+  }
+}
+
 /**
  * Switch Active View
  */
 export function navigateTo(viewName) {
+  clearSessionWatchdog();
+
   const user = getCurrentUser();
   if (!user && viewName !== 'auth') {
     if (viewName !== 'welcome' && viewName !== 'loading') {
@@ -771,7 +780,6 @@ async function loadGoals() {
     console.error('Failed to load goals:', err);
   }
 }
-}
 
 /**
  * Security View Loader
@@ -919,6 +927,10 @@ window.SmartPocket = {
   showAuthTab,
   updateAuthLayout,
   loginDemoUser,
+  retryAuth: () => {
+    navigateTo('loading');
+    initializeSession();
+  },
   openAddTransactionModal: () => {
     const user = getCurrentUser();
     if (!user) {
@@ -1726,31 +1738,84 @@ subscribeSyncState((state) => {
 });
 
 /**
+ * Verifies authenticated session with backend and directs to dashboard, auth, or error view
+ */
+export async function initializeSession() {
+  clearSessionWatchdog();
+
+  const spinContainer = document.getElementById('loading-spinner-container');
+  const errContainer = document.getElementById('loading-error-container');
+  const errDesc = document.getElementById('loading-error-desc');
+
+  // Ensure loading spinner is visible and error container is hidden
+  if (spinContainer) spinContainer.style.display = 'block';
+  if (errContainer) errContainer.style.display = 'none';
+
+  try {
+    const authResult = await checkAuth({ timeout: 5000 });
+
+    if (authResult.authenticated && authResult.user) {
+      updateAuthLayout(true);
+      updateUserBadges(authResult.user);
+      navigateTo('dashboard');
+      synchronize();
+    } else if (authResult.isUnauthenticated) {
+      // Normal unauthenticated session (fresh visit, expired cookie, 401/403)
+      updateAuthLayout(false);
+      updateUserBadges(null);
+      navigateTo('auth');
+      showAuthTab('login');
+    } else {
+      // Backend unreachable, connection refused, or request timeout
+      updateAuthLayout(false);
+      updateUserBadges(null);
+      if (spinContainer) spinContainer.style.display = 'none';
+      if (errContainer) {
+        errContainer.style.display = 'block';
+        if (errDesc) {
+          errDesc.textContent = authResult.error?.isTimeout
+            ? 'Session check timed out. The server took too long to respond.'
+            : 'Unable to connect to SmartPocket server. Make sure the server is running on http://127.0.0.1:3000.';
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Session initialization error:', err);
+    updateAuthLayout(false);
+    updateUserBadges(null);
+    if (spinContainer) spinContainer.style.display = 'none';
+    if (errContainer) {
+      errContainer.style.display = 'block';
+      if (errDesc) {
+        errDesc.textContent = 'An unexpected error occurred while verifying your session.';
+      }
+    }
+  }
+}
+
+/**
  * Bootstrap Application
  */
 async function initApp() {
-  updateAuthLayout(false);
-  setupEventHandlers();
-
-  // Register Service Worker
-  if ('serviceWorker' in navigator) {
-    try {
-      await navigator.serviceWorker.register('/service-worker.js');
-    } catch (_) {}
-  }
-
-  // Check auth with backend session
-  const user = await checkAuth();
-  if (user) {
-    updateAuthLayout(true);
-    updateUserBadges(user);
-    navigateTo('dashboard');
-    synchronize();
-  } else {
+  try {
     updateAuthLayout(false);
-    updateUserBadges(null);
-    navigateTo('auth');
-    showAuthTab('login');
+    setupEventHandlers();
+
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      try {
+        await navigator.serviceWorker.register('/service-worker.js');
+      } catch (_) {}
+    }
+
+    // Initialize session verification
+    await initializeSession();
+  } catch (err) {
+    console.error('Fatal application bootstrap error:', err);
+    const spinContainer = document.getElementById('loading-spinner-container');
+    const errContainer = document.getElementById('loading-error-container');
+    if (spinContainer) spinContainer.style.display = 'none';
+    if (errContainer) errContainer.style.display = 'block';
   }
 }
 

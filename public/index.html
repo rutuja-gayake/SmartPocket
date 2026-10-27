@@ -93,10 +93,24 @@
       <main class="content-body">
         <!-- VIEW: AUTH / APP LOADING STATE -->
         <section id="view-loading" class="view-section active" style="text-align: center; padding: 60px 20px;">
-          <div style="display: inline-block; padding: 32px; max-width: 400px; width: 100%;">
+          <!-- Active verification spinner -->
+          <div id="loading-spinner-container" style="display: inline-block; padding: 32px; max-width: 420px; width: 100%;">
             <div class="auth-loading-spinner" style="width: 42px; height: 42px; border: 3px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; margin: 0 auto 16px; animation: spin 0.8s linear infinite;"></div>
-            <div style="font-weight: 600; font-size: 1.05rem; color: var(--color-text-main); margin-bottom: 6px;">Verifying Session...</div>
-            <div style="font-size: 0.85rem; color: var(--color-text-muted);">Securing your SmartPocket wallet</div>
+            <div style="font-weight: 600; font-size: 1.1rem; color: var(--color-text-main); margin-bottom: 6px;">Verifying Session...</div>
+            <div style="font-size: 0.88rem; color: var(--color-text-muted);">Securing your SmartPocket wallet</div>
+          </div>
+
+          <!-- Error / Connection Timeout fallback (hidden while verifying) -->
+          <div id="loading-error-container" style="display: none; max-width: 440px; margin: 0 auto; padding: 24px;" class="card">
+            <div style="font-size: 2.2rem; margin-bottom: 12px;">⚠️</div>
+            <h3 id="loading-error-title" style="font-size: 1.15rem; color: var(--color-danger, #ef4444); margin-bottom: 8px;">Unable to Connect to Server</h3>
+            <p id="loading-error-desc" style="font-size: 0.88rem; color: var(--color-text-muted); margin-bottom: 20px;">
+              We couldn't reach the SmartPocket backend. Please make sure the server is running or check your network connection.
+            </p>
+            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+              <button id="btn-loading-retry" class="btn btn-primary btn-sm" onclick="window.SmartPocket.retryAuth()">🔄 Retry Connection</button>
+              <button id="btn-loading-proceed-auth" class="btn btn-secondary btn-sm" onclick="window.SmartPocket.navigateTo('auth')">Proceed to Sign In</button>
+            </div>
           </div>
         </section>
 
@@ -715,6 +729,19 @@
       <button class="btn btn-primary" style="width:100%; margin-top: 16px;" data-modal-close>I Have Saved My Recovery Codes</button>
     </div>
   </div>
+
+  <!-- Session verification watchdog fallback -->
+  <script>
+    window.__sessionWatchdog = setTimeout(function() {
+      var loadingSection = document.getElementById('view-loading');
+      var spinContainer = document.getElementById('loading-spinner-container');
+      var errContainer = document.getElementById('loading-error-container');
+      if (loadingSection && loadingSection.classList.contains('active')) {
+        if (spinContainer) spinContainer.style.display = 'none';
+        if (errContainer) errContainer.style.display = 'block';
+      }
+    }, 6000);
+  </script>
 
   <!-- Main ES Module Application Entrypoint -->
   <script type="module" src="/js/app.js"></script>

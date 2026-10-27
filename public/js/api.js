@@ -13,11 +13,27 @@ export const api = {
       defaultHeaders['Content-Type'] = 'application/json';
     }
 
-    options.headers = { ...defaultHeaders, ...options.headers };
-    options.credentials = 'include';
+    const fetchOptions = {
+      ...options,
+      headers: { ...defaultHeaders, ...options.headers },
+      credentials: 'include'
+    };
+
+    // Attach timeout if not explicitly provided with a custom signal
+    let timerId = null;
+    const timeoutMs = options.timeout || 10000;
+    if (!fetchOptions.signal && typeof AbortController !== 'undefined') {
+      const controller = new AbortController();
+      fetchOptions.signal = controller.signal;
+      timerId = setTimeout(() => {
+        controller.abort(new Error('Request timed out'));
+      }, timeoutMs);
+    }
 
     try {
-      const response = await fetch(endpoint, options);
+      const response = await fetch(endpoint, fetchOptions);
+      if (timerId) clearTimeout(timerId);
+
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
@@ -37,6 +53,12 @@ export const api = {
 
       return data;
     } catch (err) {
+      if (timerId) clearTimeout(timerId);
+      if (err.name === 'AbortError' || err.message?.includes('timed out')) {
+        const timeoutError = new Error('Connection timed out. Please try again.');
+        timeoutError.isTimeout = true;
+        throw timeoutError;
+      }
       if (!window.navigator.onLine || err.name === 'TypeError') {
         err.isOffline = true;
       }
@@ -46,10 +68,10 @@ export const api = {
 
   // Auth
   auth: {
-    register: (payload) => api.request('/api/auth/register', { method: 'POST', body: payload }),
-    login: (payload) => api.request('/api/auth/login', { method: 'POST', body: payload }),
-    logout: () => api.request('/api/auth/logout', { method: 'POST' }),
-    me: () => api.request('/api/auth/me'),
+    register: (payload, options = {}) => api.request('/api/auth/register', { method: 'POST', body: payload, ...options }),
+    login: (payload, options = {}) => api.request('/api/auth/login', { method: 'POST', body: payload, ...options }),
+    logout: (options = {}) => api.request('/api/auth/logout', { method: 'POST', ...options }),
+    me: (options = {}) => api.request('/api/auth/me', options),
     setup2fa: () => api.request('/api/auth/2fa/setup', { method: 'POST' }),
     verify2fa: (payload) => api.request('/api/auth/2fa/verify', { method: 'POST', body: payload }),
     recovery2fa: (payload) => api.request('/api/auth/2fa/recovery', { method: 'POST', body: payload }),
