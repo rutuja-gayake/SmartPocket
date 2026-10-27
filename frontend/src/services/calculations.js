@@ -74,8 +74,32 @@ export function calculateRemainingBudget(monthlyBudgetPaise, currentMonthExpense
   return monthlyBudgetPaise - currentMonthExpensePaise;
 }
 
+export function calculateAvailableToSpend({
+  monthlyAllowancePaise = 0,
+  monthlySpentPaise = 0,
+  netSavingsAllocatedPaise = 0
+}) {
+  const rawRemainingPaise = monthlyAllowancePaise - monthlySpentPaise - netSavingsAllocatedPaise;
+  const availableToSpendPaise = Math.max(0, rawRemainingPaise);
+  const isOverspent = rawRemainingPaise < 0;
+
+  const totalConsumed = monthlySpentPaise + Math.max(0, netSavingsAllocatedPaise);
+  const consumptionPct = monthlyAllowancePaise > 0
+    ? Math.min(100, Math.round((totalConsumed / monthlyAllowancePaise) * 100))
+    : (totalConsumed > 0 ? 100 : 0);
+
+  return {
+    availableToSpendPaise,
+    rawRemainingPaise,
+    isOverspent,
+    consumptionPct
+  };
+}
+
 export function calculateSafeDailySpending({
   availableBalancePaise = 0,
+  availableToSpendPaise = undefined,
+  monthlyAllowancePaise = 0,
   monthlyBudgetPaise = 0,
   currentMonthExpensePaise = 0,
   currentDate = new Date(),
@@ -83,59 +107,109 @@ export function calculateSafeDailySpending({
 }) {
   const remainingDays = getRemainingDaysInMonth(currentDate);
 
-  if (totalTransactionCount === 0 && availableBalancePaise === 0) {
+  if (remainingDays <= 0) {
+    return {
+      safeDailyPaise: 0,
+      remainingDays: 0,
+      remainingBudgetPaise: monthlyBudgetPaise > 0 ? (monthlyBudgetPaise - currentMonthExpensePaise) : 0,
+      status: 'PERIOD_ENDED',
+      message: 'This monthly period has ended. Review your summary or switch to the current month.'
+    };
+  }
+
+  if (totalTransactionCount === 0 && availableBalancePaise === 0 && monthlyAllowancePaise === 0) {
     return {
       safeDailyPaise: 0,
       remainingDays,
       remainingBudgetPaise: 0,
       status: 'NEW_USER',
-      message: 'Add your starting pocket money or allowance to calculate your daily spending allowance.'
+      message: 'Set your monthly allowance or add starting pocket money to calculate your daily spending allowance.'
     };
   }
 
-  if (availableBalancePaise <= 0) {
+  // Determine spendable constraints
+  const candidateLimits = [];
+
+  if (availableBalancePaise > 0) {
+    candidateLimits.push(availableBalancePaise);
+  }
+
+  if (monthlyAllowancePaise > 0) {
+    const allowanceLeft = availableToSpendPaise !== undefined
+      ? availableToSpendPaise
+      : Math.max(0, monthlyAllowancePaise - currentMonthExpensePaise);
+    if (allowanceLeft <= 0) {
+      return {
+        safeDailyPaise: 0,
+        remainingDays,
+        remainingBudgetPaise: monthlyBudgetPaise > 0 ? (monthlyBudgetPaise - currentMonthExpensePaise) : 0,
+        status: 'NO_FUNDS',
+        message: 'Monthly allowance has been completely spent or allocated. Keep expenses to essentials.'
+      };
+    }
+    candidateLimits.push(allowanceLeft);
+  }
+
+  let remainingBudgetPaise = 0;
+  if (monthlyBudgetPaise > 0) {
+    remainingBudgetPaise = monthlyBudgetPaise - currentMonthExpensePaise;
+    if (remainingBudgetPaise <= 0) {
+      return {
+        safeDailyPaise: 0,
+        remainingDays,
+        remainingBudgetPaise,
+        status: 'BUDGET_EXCEEDED',
+        message: `Monthly budget exceeded by ${formatINR(Math.abs(remainingBudgetPaise))}. Keep daily spending to essential needs only.`
+      };
+    }
+    candidateLimits.push(remainingBudgetPaise);
+  }
+
+  if (availableBalancePaise <= 0 && monthlyAllowancePaise === 0) {
     return {
       safeDailyPaise: 0,
       remainingDays,
-      remainingBudgetPaise: monthlyBudgetPaise > 0 ? monthlyBudgetPaise - currentMonthExpensePaise : 0,
+      remainingBudgetPaise,
       status: 'NO_FUNDS',
       message: 'Spendable balance is empty. Limit daily spending to essentials until next allowance.'
     };
   }
 
-  if (monthlyBudgetPaise <= 0) {
-    const safeDailyPaise = Math.max(0, Math.floor(availableBalancePaise / remainingDays));
+  const spendablePool = candidateLimits.length > 0
+    ? Math.min(...candidateLimits)
+    : Math.max(0, availableBalancePaise);
+
+  if (spendablePool <= 0) {
+    return {
+      safeDailyPaise: 0,
+      remainingDays,
+      remainingBudgetPaise,
+      status: 'NO_FUNDS',
+      message: 'No spendable funds remaining for this period.'
+    };
+  }
+
+  const safeDailyPaise = Math.max(0, Math.floor(spendablePool / remainingDays));
+
+  if (monthlyBudgetPaise <= 0 && monthlyAllowancePaise <= 0) {
     return {
       safeDailyPaise,
       remainingDays,
       remainingBudgetPaise: 0,
       status: 'NO_BUDGET',
-      message: `No monthly budget configured. Pacing your balance gives ${formatINR(safeDailyPaise)}/day for the next ${remainingDays} days.`
+      message: `No budget or allowance configured. Pacing your balance gives ${formatINR(safeDailyPaise)}/day for the next ${remainingDays} days.`
     };
   }
 
-  const remainingBudgetPaise = monthlyBudgetPaise - currentMonthExpensePaise;
-  if (remainingBudgetPaise <= 0) {
-    return {
-      safeDailyPaise: 0,
-      remainingDays,
-      remainingBudgetPaise,
-      status: 'BUDGET_EXCEEDED',
-      message: `Monthly budget exceeded by ${formatINR(Math.abs(remainingBudgetPaise))}. Keep daily spending to essential needs only.`
-    };
-  }
-
-  const spendablePool = Math.min(availableBalancePaise, remainingBudgetPaise);
-  const safeDailyPaise = Math.max(0, Math.floor(spendablePool / remainingDays));
-
-  const spentRatio = currentMonthExpensePaise / monthlyBudgetPaise;
-  if (spentRatio >= 0.85) {
+  const referenceCap = monthlyBudgetPaise > 0 ? monthlyBudgetPaise : monthlyAllowancePaise;
+  const spentRatio = referenceCap > 0 ? (currentMonthExpensePaise / referenceCap) : 0;
+  if (spentRatio >= 0.85 || (referenceCap > 0 && safeDailyPaise < (referenceCap / 30) * 0.25)) {
     return {
       safeDailyPaise,
       remainingDays,
       remainingBudgetPaise,
       status: 'NEAR_LIMIT',
-      message: `Warning: You have spent ${(spentRatio * 100).toFixed(0)}% of your monthly budget. Recommended daily limit: ${formatINR(safeDailyPaise)}/day.`
+      message: `Caution: You have used ${(spentRatio * 100).toFixed(0)}% of your monthly funds. Recommended daily limit: ${formatINR(safeDailyPaise)}/day.`
     };
   }
 

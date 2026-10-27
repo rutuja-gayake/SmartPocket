@@ -47,13 +47,13 @@ export default function AdvisorPage({ currentPeriod }) {
       };
       setMessages(prev => [...prev, replyMsg]);
     } catch (err) {
-      showToast(err.message || 'Advisor request failed.', 'error');
+      showToast(err.message || 'We could not complete your request. Please try again.', 'error');
       setMessages(prev => [
         ...prev,
         {
           id: `err_${Date.now()}`,
           sender: 'advisor',
-          text: 'Sorry, I had trouble reaching the AI advisor. Please verify the backend is running.'
+          text: "I couldn't analyze your finances right now. Please check your connection and try again."
         }
       ]);
     } finally {
@@ -138,3 +138,4 @@ export default function AdvisorPage({ currentPeriod }) {
     </div>
   );
 }
+

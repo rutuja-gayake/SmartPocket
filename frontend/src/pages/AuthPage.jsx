@@ -109,7 +109,7 @@ export default function AuthPage() {
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
           <img src="/icon.svg" alt="SmartPocket" style={{ width: '56px', height: '56px', margin: '0 auto 12px' }} />
           <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--color-primary)' }}>Welcome to SmartPocket</h2>
-          <p style={{ fontSize: '0.88rem', color: 'var(--color-text-muted)' }}>Student Budget & Savings Advisor (React+Vite)</p>
+          <p style={{ fontSize: '0.88rem', color: 'var(--color-text-muted)' }}>Student Budget & Savings Advisor</p>
         </div>
 
         {errorMsg && (
@@ -224,18 +224,6 @@ export default function AuthPage() {
                     Create an account
                   </span>
                 </div>
-
-                <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--color-border)', textAlign: 'center' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    style={{ width: '100%' }}
-                    onClick={handleDemoLogin}
-                    disabled={loading}
-                  >
-                    ⚡ 1-Click Demo Login (student@example.edu)
-                  </button>
-                </div>
               </form>
             ) : (
               <form onSubmit={handleRegisterSubmit}>
@@ -296,3 +284,4 @@ export default function AuthPage() {
     </div>
   );
 }
+

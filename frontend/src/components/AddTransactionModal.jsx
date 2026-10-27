@@ -193,3 +193,4 @@ export default function AddTransactionModal({ isOpen, onClose, onSuccess }) {
     </div>
   );
 }
+

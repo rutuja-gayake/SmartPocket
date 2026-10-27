@@ -103,12 +103,12 @@
           <!-- Error / Connection Timeout fallback (hidden while verifying) -->
           <div id="loading-error-container" style="display: none; max-width: 440px; margin: 0 auto; padding: 24px;" class="card">
             <div style="font-size: 2.2rem; margin-bottom: 12px;">⚠️</div>
-            <h3 id="loading-error-title" style="font-size: 1.15rem; color: var(--color-danger, #ef4444); margin-bottom: 8px;">Unable to Connect to Server</h3>
+            <h3 id="loading-error-title" style="font-size: 1.15rem; color: var(--color-danger, #ef4444); margin-bottom: 8px;">Unable to Connect</h3>
             <p id="loading-error-desc" style="font-size: 0.88rem; color: var(--color-text-muted); margin-bottom: 20px;">
-              We couldn't reach the SmartPocket backend. Please make sure the server is running or check your network connection.
+              We couldn't connect right now. Please check your internet connection and try again.
             </p>
             <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-              <button id="btn-loading-retry" class="btn btn-primary btn-sm" onclick="window.SmartPocket.retryAuth()">🔄 Retry Connection</button>
+              <button id="btn-loading-retry" class="btn btn-primary btn-sm" onclick="window.SmartPocket.retryAuth()">🔄 Try Again</button>
               <button id="btn-loading-proceed-auth" class="btn btn-secondary btn-sm" onclick="window.SmartPocket.navigateTo('auth')">Proceed to Sign In</button>
             </div>
           </div>
@@ -133,14 +133,13 @@
                 <p style="font-size: 0.88rem;">Keep essential needs at 50%, discretionary wants under 30%, and save 20% consistently.</p>
               </div>
               <div class="card">
-                <h4 style="color:var(--color-primary); margin-bottom: 6px;">3. 100% Offline PWA</h4>
-                <p style="font-size: 0.88rem;">Works seamlessly in your college basement or offline mess. Synchronizes whenever connectivity returns.</p>
+                <h4 style="color:var(--color-primary); margin-bottom: 6px;">3. Always Accessible</h4>
+                <p style="font-size: 0.88rem;">Works seamlessly even without an active connection. Synchronizes automatically when you reconnect.</p>
               </div>
             </div>
 
             <div style="display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
               <button class="btn btn-primary" data-view="auth">Sign In / Register</button>
-              <button class="btn btn-secondary btn-demo-login" onclick="window.SmartPocket.loginDemoUser()">⚡ Quick Demo Sign In (1-Click)</button>
             </div>
           </div>
         </section>
@@ -173,12 +172,6 @@
 
                 <div style="margin-top: 14px; text-align: center; font-size: 0.85rem; color: var(--color-text-muted);">
                   Don't have an account? <a href="#" id="link-goto-register" style="color: var(--color-primary); font-weight: 600; text-decoration: none;">Create an account</a>
-                </div>
-
-                <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border); text-align: center;">
-                  <button type="button" class="btn btn-secondary btn-sm btn-demo-login" onclick="window.SmartPocket.loginDemoUser()" style="width: 100%;">
-                    ⚡ 1-Click Demo Login (student@example.edu)
-                  </button>
                 </div>
               </form>
 
@@ -230,6 +223,71 @@
             </div>
             <div id="dash-safe-status-badge">
               <span class="status-badge healthy">Healthy</span>
+            </div>
+          </div>
+
+          <!-- Monthly Allowance Interactive Widget -->
+          <div class="card" id="dash-allowance-card" style="margin-bottom: 24px; border-left: 4px solid var(--color-primary);">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+              <div>
+                <h3 style="font-size:1.15rem; color:var(--color-primary); display:flex; align-items:center; gap:8px; margin:0;">
+                  <span>💵</span> Monthly Pocket Money Allowance
+                </h3>
+                <span id="dash-allowance-period" style="font-size:0.85rem; color:var(--color-text-muted);">Current Period</span>
+              </div>
+              <button class="btn btn-secondary btn-sm" id="btn-dash-edit-allowance" onclick="window.SmartPocket.openAllowanceModal()">
+                + Set Monthly Allowance
+              </button>
+            </div>
+
+            <!-- Empty State -->
+            <div id="dash-allowance-empty" style="text-align:center; padding:20px 16px; background:var(--color-surface-subtle); border-radius:var(--radius-md);">
+              <p style="color:var(--color-text-muted); margin-bottom:12px; font-size:0.9rem;">
+                No monthly allowance configured for this month. Set your expected pocket money to get personalized "Available to Spend" tracking and smart daily limits.
+              </p>
+              <button class="btn btn-primary btn-sm" onclick="window.SmartPocket.openAllowanceModal()">+ Set Monthly Allowance</button>
+            </div>
+
+            <!-- Populated State -->
+            <div id="dash-allowance-populated" style="display:none;">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom:16px;">
+                <div style="padding:12px; background:var(--color-surface-subtle); border-radius:var(--radius-md);">
+                  <div style="font-size:0.75rem; color:var(--color-text-muted); text-transform:uppercase; font-weight:600;">Monthly Allowance</div>
+                  <div id="dash-allowance-total" style="font-size:1.25rem; font-weight:700; color:var(--color-text-main); margin-top:4px;">₹0.00</div>
+                  <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Original allocation</div>
+                </div>
+
+                <div style="padding:12px; background:var(--color-surface-subtle); border-radius:var(--radius-md);">
+                  <div style="font-size:0.75rem; color:var(--color-text-muted); text-transform:uppercase; font-weight:600;">Monthly Spent</div>
+                  <div id="dash-allowance-spent" style="font-size:1.25rem; font-weight:700; color:var(--color-danger, #ef4444); margin-top:4px;">₹0.00</div>
+                  <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Actual expenses</div>
+                </div>
+
+                <div style="padding:12px; background:var(--color-surface-subtle); border-radius:var(--radius-md);">
+                  <div style="font-size:0.75rem; color:var(--color-text-muted); text-transform:uppercase; font-weight:600;">Savings Allocated</div>
+                  <div id="dash-allowance-savings" style="font-size:1.25rem; font-weight:700; color:var(--color-savings); margin-top:4px;">₹0.00</div>
+                  <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Net saved in goals</div>
+                </div>
+
+                <div id="dash-allowance-available-card" style="padding:12px; background:rgba(16, 185, 129, 0.1); border-radius:var(--radius-md); border:1px solid rgba(16, 185, 129, 0.3);">
+                  <div style="font-size:0.75rem; color:var(--color-primary); text-transform:uppercase; font-weight:600;">Available to Spend</div>
+                  <div id="dash-allowance-available" style="font-size:1.25rem; font-weight:800; color:var(--color-primary); margin-top:4px;">₹0.00</div>
+                  <div style="font-size:0.75rem; color:var(--color-text-muted); margin-top:2px;">Allowance − Spent − Savings</div>
+                </div>
+              </div>
+
+              <!-- Segmented Progress Bar -->
+              <div style="margin: 8px 0;">
+                <div style="display:flex; height:10px; border-radius:999px; overflow:hidden; background:#e2e8f0;">
+                  <div id="dash-allowance-bar-spent" style="background-color:#ef4444; width:0%; transition:width 0.3s ease;"></div>
+                  <div id="dash-allowance-bar-savings" style="background-color:#059669; width:0%; transition:width 0.3s ease;"></div>
+                </div>
+              </div>
+
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.82rem; color:var(--color-text-muted); margin-top:4px;">
+                <span id="dash-allowance-summary">₹0.00 remaining</span>
+                <span id="dash-allowance-budget-sub"></span>
+              </div>
             </div>
           </div>
 
@@ -687,6 +745,35 @@
           <input type="text" id="movement-note" class="form-control" placeholder="e.g. Saved from weekly allowance">
         </div>
         <button type="submit" id="btn-submit-movement" class="btn btn-primary" style="width:100%; margin-top:12px;">Confirm Movement</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: SET / EDIT MONTHLY ALLOWANCE -->
+  <div id="modal-allowance" class="modal-overlay">
+    <div class="modal" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 id="modal-allowance-title">Set Monthly Allowance</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <form id="form-allowance">
+        <div class="form-group">
+          <label class="form-label">Applicable Period</label>
+          <input type="text" id="allowance-period-display" class="form-control" disabled style="background:#f8fafc;">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="allowance-amount">Monthly Allowance (₹)</label>
+          <input type="number" id="allowance-amount" class="form-control" step="any" min="0" required placeholder="e.g. 5000">
+          <small style="color:var(--color-text-muted); font-size:0.78rem;">The total pocket money or allowance expected for this month.</small>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="allowance-notes">Notes (Optional)</label>
+          <input type="text" id="allowance-notes" class="form-control" placeholder="e.g. Allowance from parents">
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" onclick="window.SmartPocket.closeModal('modal-allowance')">Cancel</button>
+          <button type="submit" id="btn-allowance-submit" class="btn btn-primary">Save Allowance</button>
+        </div>
       </form>
     </div>
   </div>

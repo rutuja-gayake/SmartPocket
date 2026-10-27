@@ -122,3 +122,4 @@ export default function AddGoalModal({ isOpen, onClose, onSuccess }) {
     </div>
   );
 }
+

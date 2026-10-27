@@ -102,3 +102,4 @@ export default function Sidebar({ activeView, setActiveView }) {
     </aside>
   );
 }
+

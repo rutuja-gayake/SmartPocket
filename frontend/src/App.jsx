@@ -19,7 +19,7 @@ import AdvisorPage from './pages/AdvisorPage';
 import SecurityPage from './pages/SecurityPage';
 
 export default function App() {
-  const { authStatus, authError, retryAuth } = useAuth();
+  const { authStatus, authError, retryAuth, proceedToAuth } = useAuth();
   const [activeView, setActiveView] = useState('dashboard');
   const [currentPeriod, setCurrentPeriod] = useState(getCurrentPeriod());
 
@@ -53,11 +53,14 @@ export default function App() {
           <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⚠️</div>
           <h3 style={{ fontSize: '1.2rem', color: 'var(--color-danger, #ef4444)', marginBottom: '8px' }}>Unable to Connect to Server</h3>
           <p style={{ fontSize: '0.88rem', color: 'var(--color-text-muted)', marginBottom: '24px' }}>
-            {authError || 'We could not reach the SmartPocket backend. Please make sure the server is running on http://127.0.0.1:3000.'}
+            {authError || "We couldn't reach the SmartPocket backend. Please make sure the server is running or check your network connection."}
           </p>
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <button className="btn btn-primary btn-sm" onClick={retryAuth}>
               🔄 Retry Connection
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={proceedToAuth}>
+              Proceed to Sign In
             </button>
           </div>
         </div>
@@ -178,3 +181,4 @@ export default function App() {
     </div>
   );
 }
+

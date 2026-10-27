@@ -151,6 +151,8 @@ export function navigateTo(viewName) {
   }
 }
 
+let currentAllowanceState = null;
+
 /**
  * Dashboard Loader
  */
@@ -160,17 +162,21 @@ async function loadDashboard() {
     let budget = null;
     let goals = [];
     let budgetRes = null;
+    let allowRes = null;
 
     if (window.navigator.onLine) {
-      const [txRes, bRes, goalsRes] = await Promise.all([
+      const [txRes, bRes, goalsRes, aRes] = await Promise.all([
         api.transactions.list(`period=${currentPeriod}`),
         api.budgets.get(currentPeriod),
-        api.goals.list()
+        api.goals.list(),
+        api.allowances.get(currentPeriod).catch(() => null)
       ]);
       txs = txRes.transactions || [];
       budgetRes = bRes;
       budget = budgetRes?.budget || null;
       goals = goalsRes.goals || [];
+      allowRes = aRes;
+      currentAllowanceState = allowRes;
       cachedGoals = goals;
       for (const g of goals) {
         saveLocalGoal(g).catch(() => {});
@@ -354,6 +360,56 @@ async function loadDashboard() {
         dashBudgetSubtextEl.textContent = 'Target spending cap';
         dashBudgetSubtextEl.style.color = 'var(--color-text-muted)';
       }
+    }
+
+    // Populate Monthly Allowance Widget on Dashboard
+    const dashAllowPeriodEl = document.getElementById('dash-allowance-period');
+    const dashAllowEmptyEl = document.getElementById('dash-allowance-empty');
+    const dashAllowPopulatedEl = document.getElementById('dash-allowance-populated');
+    const dashAllowBtnEl = document.getElementById('btn-dash-edit-allowance');
+    const dashAllowTotalEl = document.getElementById('dash-allowance-total');
+    const dashAllowSpentEl = document.getElementById('dash-allowance-spent');
+    const dashAllowSavingsEl = document.getElementById('dash-allowance-savings');
+    const dashAllowAvailEl = document.getElementById('dash-allowance-available');
+    const dashAllowBarSpentEl = document.getElementById('dash-allowance-bar-spent');
+    const dashAllowBarSavingsEl = document.getElementById('dash-allowance-bar-savings');
+    const dashAllowSummaryEl = document.getElementById('dash-allowance-summary');
+    const dashAllowBudgetSubEl = document.getElementById('dash-allowance-budget-sub');
+
+    if (dashAllowPeriodEl) dashAllowPeriodEl.textContent = `Period: ${currentPeriod}`;
+
+    if (allowRes && allowRes.hasAllowance && allowRes.monthlyAllowancePaise > 0) {
+      if (dashAllowEmptyEl) dashAllowEmptyEl.style.display = 'none';
+      if (dashAllowPopulatedEl) dashAllowPopulatedEl.style.display = 'block';
+      if (dashAllowBtnEl) dashAllowBtnEl.textContent = '✏️ Edit Allowance';
+
+      if (dashAllowTotalEl) dashAllowTotalEl.textContent = formatINR(allowRes.monthlyAllowancePaise);
+      if (dashAllowSpentEl) dashAllowSpentEl.textContent = formatINR(allowRes.monthlySpentPaise);
+      if (dashAllowSavingsEl) dashAllowSavingsEl.textContent = formatINR(allowRes.netSavingsAllocatedPaise);
+      if (dashAllowAvailEl) {
+        dashAllowAvailEl.textContent = formatINR(allowRes.availableToSpendPaise);
+        dashAllowAvailEl.style.color = allowRes.isOverspent ? 'var(--color-danger, #ef4444)' : 'var(--color-primary)';
+      }
+
+      const spentPct = Math.min(100, Math.round((allowRes.monthlySpentPaise / allowRes.monthlyAllowancePaise) * 100));
+      const savingsPct = Math.min(100 - spentPct, Math.round((Math.max(0, allowRes.netSavingsAllocatedPaise) / allowRes.monthlyAllowancePaise) * 100));
+
+      if (dashAllowBarSpentEl) dashAllowBarSpentEl.style.width = `${spentPct}%`;
+      if (dashAllowBarSavingsEl) dashAllowBarSavingsEl.style.width = `${savingsPct}%`;
+
+      if (dashAllowSummaryEl) {
+        dashAllowSummaryEl.textContent = allowRes.isOverspent
+          ? `Over allowance by ${formatINR(Math.abs(allowRes.rawRemainingAllowancePaise))}`
+          : `${formatINR(allowRes.availableToSpendPaise)} remaining (${100 - allowRes.consumptionPct}% available)`;
+      }
+
+      if (dashAllowBudgetSubEl && budget) {
+        dashAllowBudgetSubEl.textContent = `Budget: ${formatINR(budget.total_budget_paise)}`;
+      }
+    } else {
+      if (dashAllowEmptyEl) dashAllowEmptyEl.style.display = 'block';
+      if (dashAllowPopulatedEl) dashAllowPopulatedEl.style.display = 'none';
+      if (dashAllowBtnEl) dashAllowBtnEl.textContent = '+ Set Monthly Allowance';
     }
 
     // 50/30/20 Guideline metrics
@@ -823,7 +879,7 @@ async function askAdvisor(queryText) {
   // Append thinking bubble
   const assistantBubble = document.createElement('div');
   assistantBubble.className = 'chat-bubble assistant';
-  assistantBubble.textContent = 'Consulting Groq AI with your real financial ledger...';
+  assistantBubble.textContent = 'Analyzing your student budget and spending...';
   messagesContainer.appendChild(assistantBubble);
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
@@ -832,12 +888,9 @@ async function askAdvisor(queryText) {
 
     assistantBubble.innerHTML = `
       <div>${escapeHtml(res.answer)}</div>
-      <div style="margin-top: 6px; font-size: 0.72rem; color: var(--color-text-muted);">
-        Mode: ${res.mode === 'cloud' ? `☁️ Real Groq AI (${res.provider?.toUpperCase() || 'GROQ'})` : '🔒 Offline Engine'}
-      </div>
     `;
   } catch (err) {
-    assistantBubble.textContent = 'Unable to evaluate query at the moment. Please verify your connection or try a simpler question.';
+    assistantBubble.textContent = "I couldn't analyze your finances right now. Please check your connection and try again.";
   }
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
@@ -1023,13 +1076,13 @@ window.SmartPocket = {
     }
   },
   triggerManualSync: async () => {
-    showToast('Synchronizing with server...', 'info');
+    showToast('Syncing your changes...', 'info');
     const res = await synchronize();
     if (res.success) {
-      showToast('Synchronization complete!', 'success');
+      showToast('Sync complete!', 'success');
       loadDashboard();
     } else {
-      showToast('Sync failed. Changes remain securely stored offline.', 'error');
+      showToast("Couldn't sync right now. Your changes are safely saved locally.", 'info');
     }
   },
   askAdvisor,
@@ -1774,8 +1827,8 @@ export async function initializeSession() {
         errContainer.style.display = 'block';
         if (errDesc) {
           errDesc.textContent = authResult.error?.isTimeout
-            ? 'Session check timed out. The server took too long to respond.'
-            : 'Unable to connect to SmartPocket server. Make sure the server is running on http://127.0.0.1:3000.';
+            ? 'This is taking longer than expected. Please try again.'
+            : "We couldn't connect right now. Please check your internet connection and try again.";
         }
       }
     }
@@ -1787,7 +1840,7 @@ export async function initializeSession() {
     if (errContainer) {
       errContainer.style.display = 'block';
       if (errDesc) {
-        errDesc.textContent = 'An unexpected error occurred while verifying your session.';
+        errDesc.textContent = "We couldn't connect right now. Please check your internet connection and try again.";
       }
     }
   }

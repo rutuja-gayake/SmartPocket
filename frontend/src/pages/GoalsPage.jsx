@@ -164,3 +164,4 @@ export default function GoalsPage({ onOpenAddGoal, onOpenMovement }) {
     </div>
   );
 }
+

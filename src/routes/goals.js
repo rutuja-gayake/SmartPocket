@@ -267,6 +267,9 @@ goalsRouter.post('/:id/movements', requireAuth, (req, res) => {
 
     // Verify sufficient available funds if depositing
     if (type === 'deposit') {
+      const nowIso = new Date().toISOString();
+      const currentPeriod = nowIso.slice(0, 7);
+
       const lifetime = db.prepare(`
         SELECT
           COALESCE(SUM(CASE WHEN type = 'income' THEN amount_paise ELSE 0 END), 0) AS total_income,
@@ -276,15 +279,33 @@ goalsRouter.post('/:id/movements', requireAuth, (req, res) => {
         WHERE user_id = ?
       `).get(req.user.id);
 
-      const availableBalancePaise = calculateAvailableBalance({
+      const availablePocketCash = calculateAvailableBalance({
         totalIncomePaise: lifetime.total_income,
         totalExpensePaise: lifetime.total_expense,
         netSavingsTransfersPaise: lifetime.total_savings
       });
 
-      if (amountPaise > availableBalancePaise) {
+      // Check configured monthly allowance for current period
+      const allowance = db.prepare('SELECT amount_paise FROM allowances WHERE user_id = ? AND period = ?').get(req.user.id, currentPeriod);
+
+      let availableToSpendFromAllowance = 0;
+      if (allowance && allowance.amount_paise > 0) {
+        const periodStats = db.prepare(`
+          SELECT
+            COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_paise ELSE 0 END), 0) AS expense_paise,
+            COALESCE(SUM(CASE WHEN type = 'transfer_savings' THEN amount_paise ELSE 0 END), 0) AS net_savings_paise
+          FROM transactions
+          WHERE user_id = ? AND strftime('%Y-%m', date) = ?
+        `).get(req.user.id, currentPeriod);
+
+        availableToSpendFromAllowance = Math.max(0, allowance.amount_paise - periodStats.expense_paise - periodStats.net_savings_paise);
+      }
+
+      const effectiveSpendablePaise = Math.max(availablePocketCash, availableToSpendFromAllowance);
+
+      if (amountPaise > effectiveSpendablePaise) {
         return res.status(400).json({
-          error: `Insufficient available balance (₹${(availableBalancePaise / 100).toFixed(2)}) to deposit ₹${(amountPaise / 100).toFixed(2)}.`
+          error: `Insufficient available balance (₹${(effectiveSpendablePaise / 100).toFixed(2)}) to deposit ₹${(amountPaise / 100).toFixed(2)}.`
         });
       }
     }

@@ -27,7 +27,7 @@ export function AuthProvider({ children }) {
         setAuthStatus('unauthenticated');
       } else {
         setAuthStatus('error');
-        setAuthError(err.message || 'Unable to connect to SmartPocket server.');
+        setAuthError(err.message || "We couldn't connect right now. Please check your internet connection and try again.");
       }
     }
   }, []);
@@ -95,6 +95,7 @@ export function AuthProvider({ children }) {
       verify2fa,
       logout,
       retryAuth: checkSession,
+      proceedToAuth: () => setAuthStatus('unauthenticated'),
       setCurrentUser
     }}>
       {children}
@@ -109,3 +110,4 @@ export function useAuth() {
   }
   return context;
 }
+

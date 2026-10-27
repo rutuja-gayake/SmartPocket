@@ -36,7 +36,7 @@ export default function Topbar({
           />
         </div>
 
-        <div className="sync-pill synced" title="Connected to SmartPocket Backend">
+        <div className="sync-pill synced" title="Connected to SmartPocket">
           <span className="sync-dot"></span>
           <span>Online • Synced</span>
         </div>
@@ -51,3 +51,4 @@ export default function Topbar({
     </header>
   );
 }
+

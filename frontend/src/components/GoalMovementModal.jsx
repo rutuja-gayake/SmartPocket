@@ -108,3 +108,4 @@ export default function GoalMovementModal({ isOpen, onClose, goal, defaultType =
     </div>
   );
 }
+

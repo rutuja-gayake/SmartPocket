@@ -84,6 +84,33 @@ CREATE TABLE IF NOT EXISTS budgets (
 );
 CREATE INDEX IF NOT EXISTS idx_budgets_user_period ON budgets(user_id, period);
 
+-- Monthly Allowance table
+CREATE TABLE IF NOT EXISTS allowances (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  period TEXT NOT NULL,
+  amount_paise INTEGER NOT NULL DEFAULT 0,
+  notes TEXT DEFAULT '',
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(user_id, period)
+);
+CREATE INDEX IF NOT EXISTS idx_allowances_user_period ON allowances(user_id, period);
+
+-- Category Budgets table
+CREATE TABLE IF NOT EXISTS category_budgets (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  period TEXT NOT NULL,
+  category_id TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  budget_paise INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(user_id, period, category_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cat_budgets_user_period ON category_budgets(user_id, period);
+
 -- Savings Goals table
 CREATE TABLE IF NOT EXISTS savings_goals (
   id TEXT PRIMARY KEY,

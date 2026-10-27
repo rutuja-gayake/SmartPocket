@@ -74,8 +74,17 @@ function getBudgetDetails(db, userId, period) {
     dateForPeriod = new Date(y, m - 1, 1);
   }
 
+  const allowance = db.prepare(`
+    SELECT amount_paise FROM allowances WHERE user_id = ? AND period = ?
+  `).get(userId, period);
+  const monthlyAllowancePaise = allowance ? allowance.amount_paise : 0;
+  const netSavingsAllocatedPaise = periodStats.savings_transfers_paise;
+  const availableToSpendPaise = Math.max(0, monthlyAllowancePaise - periodStats.expense_paise - netSavingsAllocatedPaise);
+
   const safeDailyInfo = calculateSafeDailySpending({
     availableBalancePaise,
+    availableToSpendPaise,
+    monthlyAllowancePaise,
     monthlyBudgetPaise,
     currentMonthExpensePaise: periodStats.expense_paise,
     currentDate: dateForPeriod,
@@ -99,6 +108,9 @@ function getBudgetDetails(db, userId, period) {
   return {
     period,
     budget: budget || null,
+    allowance: allowance || null,
+    monthlyAllowancePaise,
+    availableToSpendPaise,
     remainingBudgetPaise,
     availableBalancePaise,
     totalAvailableFundsPaise,
@@ -222,6 +234,94 @@ budgetsRouter.put('/:period', requireAuth, (req, res) => {
   } catch (err) {
     console.error('Update budget error:', err);
     return res.status(500).json({ error: 'Failed to update budget.' });
+  }
+});
+
+/**
+ * GET /api/budgets/categories/:period
+ * Returns category budget limits and spending breakdown for period
+ */
+budgetsRouter.get('/categories/:period', requireAuth, (req, res) => {
+  try {
+    const period = req.params.period;
+    if (!validatePeriod(period)) {
+      return res.status(400).json({ error: 'Period must be in YYYY-MM format.' });
+    }
+
+    const db = getDb();
+    const rows = db.prepare(`
+      SELECT c.id as category_id, c.name as category_name, c.color, c.icon, c.type,
+             COALESCE(cb.budget_paise, 0) as budget_paise,
+             COALESCE(SUM(t.amount_paise), 0) as spent_paise
+      FROM categories c
+      LEFT JOIN category_budgets cb ON cb.category_id = c.id AND cb.user_id = ? AND cb.period = ?
+      LEFT JOIN transactions t ON t.category_id = c.id AND t.user_id = ? AND t.type = 'expense' AND strftime('%Y-%m', t.date) = ?
+      WHERE (c.user_id = ? OR c.user_id IS NULL) AND c.type IN ('need', 'want')
+      GROUP BY c.id
+      ORDER BY budget_paise DESC, c.name ASC
+    `).all(req.user.id, period, req.user.id, period, req.user.id);
+
+    const categories = rows.map(r => ({
+      ...r,
+      remaining_paise: r.budget_paise > 0 ? (r.budget_paise - r.spent_paise) : null,
+      pct_used: r.budget_paise > 0 ? Math.min(100, Math.round((r.spent_paise / r.budget_paise) * 100)) : null,
+      is_over_budget: r.budget_paise > 0 && r.spent_paise > r.budget_paise
+    }));
+
+    return res.json({ period, categories });
+  } catch (err) {
+    console.error('Fetch category budgets error:', err);
+    return res.status(500).json({ error: 'Failed to retrieve category budgets.' });
+  }
+});
+
+/**
+ * PUT /api/budgets/categories/:period/:categoryId
+ * Sets a spending limit for a specific category in a period
+ */
+budgetsRouter.put('/categories/:period/:categoryId', requireAuth, (req, res) => {
+  try {
+    const { period, categoryId } = req.params;
+    if (!validatePeriod(period)) {
+      return res.status(400).json({ error: 'Period must be in YYYY-MM format.' });
+    }
+
+    const { budget } = req.body;
+    if (budget === undefined || isNaN(Number(budget)) || Number(budget) < 0) {
+      return res.status(400).json({ error: 'Category budget must be a positive number.' });
+    }
+
+    const budgetPaise = rupeesToPaise(budget);
+    const db = getDb();
+    const now = new Date().toISOString();
+
+    const existing = db.prepare(`
+      SELECT id FROM category_budgets WHERE user_id = ? AND period = ? AND category_id = ?
+    `).get(req.user.id, period, categoryId);
+
+    if (existing) {
+      db.prepare(`
+        UPDATE category_budgets
+        SET budget_paise = ?, updated_at = ?
+        WHERE id = ?
+      `).run(budgetPaise, now, existing.id);
+    } else {
+      const id = crypto.randomUUID();
+      db.prepare(`
+        INSERT INTO category_budgets (id, user_id, period, category_id, budget_paise, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, req.user.id, period, categoryId, budgetPaise, now, now);
+    }
+
+    return res.json({
+      message: 'Category budget limit updated successfully',
+      categoryId,
+      period,
+      budgetPaise
+    });
+  } catch (err) {
+    console.error('Save category budget error:', err);
+    return res.status(500).json({ error: 'Failed to save category budget limit.' });
   }
 });
 

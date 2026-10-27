@@ -17,6 +17,7 @@ import { goalsRouter } from './routes/goals.js';
 import { categoriesRouter } from './routes/categories.js';
 import { syncRouter } from './routes/sync.js';
 import { advisorRouter } from './routes/advisor.js';
+import { allowancesRouter } from './routes/allowances.js';
 
 export function createApp() {
   const app = express();
@@ -61,6 +62,7 @@ export function createApp() {
   app.use('/api/categories', categoriesRouter);
   app.use('/api/sync', syncRouter);
   app.use('/api/advisor', advisorRouter);
+  app.use('/api/allowances', allowancesRouter);
 
   // SPA fallback: Route non-API GET requests to index.html
   app.use((req, res, next) => {

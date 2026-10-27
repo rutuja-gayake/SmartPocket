@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../services/api';
+import { useToast } from '../components/Toast';
 import {
   formatINR,
   calculateAvailableBalance,
+  calculateAvailableToSpend,
   calculateSafeDailySpending,
   calculate503020Metrics,
   calculateGoalProgress
@@ -34,25 +36,33 @@ ChartJS.register(
 );
 
 export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMovement }) {
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState([]);
   const [budget, setBudget] = useState(null);
   const [goals, setGoals] = useState([]);
+  const [allowanceDetails, setAllowanceDetails] = useState(null);
+  const [isAllowanceModalOpen, setIsAllowanceModalOpen] = useState(false);
+  const [allowanceInput, setAllowanceInput] = useState('');
+  const [allowanceNotes, setAllowanceNotes] = useState('');
+  const [allowanceSaving, setAllowanceSaving] = useState(false);
   const [error, setError] = useState(null);
 
   const loadData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [txRes, bRes, gRes] = await Promise.all([
+      const [txRes, bRes, gRes, allowRes] = await Promise.all([
         api.transactions.list(`period=${currentPeriod}`).catch(() => ({ transactions: [] })),
         api.budgets.get(currentPeriod).catch(() => ({ budget: null })),
-        api.goals.list().catch(() => ({ goals: [] }))
+        api.goals.list().catch(() => ({ goals: [] })),
+        api.allowances.get(currentPeriod).catch(() => null)
       ]);
 
       setTransactions(txRes.transactions || []);
       setBudget(bRes.budget || null);
       setGoals(gRes.goals || []);
+      setAllowanceDetails(allowRes);
     } catch (err) {
       setError(err.message || 'Failed to load dashboard data.');
     } finally {
@@ -87,9 +97,15 @@ export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMoveme
     });
 
     const budgetPaise = budget ? budget.total_budget_paise : 0;
+    const monthlyAllowancePaise = allowanceDetails?.monthlyAllowancePaise || 0;
+    const availableToSpendPaise = allowanceDetails?.availableToSpendPaise !== undefined
+      ? allowanceDetails.availableToSpendPaise
+      : Math.max(0, monthlyAllowancePaise - expensePaise - netSavingsPaise);
 
     const safeDaily = calculateSafeDailySpending({
       availableBalancePaise: availablePaise,
+      availableToSpendPaise,
+      monthlyAllowancePaise,
       monthlyBudgetPaise: budgetPaise,
       currentMonthExpensePaise: expensePaise,
       currentDate: new Date(),
@@ -154,7 +170,42 @@ export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMoveme
         }]
       }
     };
-  }, [transactions, budget, currentPeriod]);
+  }, [transactions, budget, allowanceDetails, currentPeriod]);
+
+  const openAllowanceModal = () => {
+    if (allowanceDetails?.allowance) {
+      setAllowanceInput(String(allowanceDetails.allowance.amount_paise / 100));
+      setAllowanceNotes(allowanceDetails.allowance.notes || '');
+    } else {
+      setAllowanceInput('');
+      setAllowanceNotes('');
+    }
+    setIsAllowanceModalOpen(true);
+  };
+
+  const handleAllowanceSubmit = async (e) => {
+    e.preventDefault();
+    if (!allowanceInput || isNaN(Number(allowanceInput)) || Number(allowanceInput) < 0) {
+      showToast('Please enter a valid positive allowance amount.', 'error');
+      return;
+    }
+
+    setAllowanceSaving(true);
+    try {
+      const res = await api.allowances.save(currentPeriod, {
+        amount: Number(allowanceInput),
+        notes: allowanceNotes
+      });
+      setAllowanceDetails(res.details);
+      showToast(`Monthly allowance for ${currentPeriod} saved successfully!`, 'success');
+      setIsAllowanceModalOpen(false);
+      loadData();
+    } catch (err) {
+      showToast(err.message || 'Failed to save allowance.', 'error');
+    } finally {
+      setAllowanceSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -194,6 +245,110 @@ export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMoveme
             {metrics.safeDaily.status.replace('_', ' ')}
           </span>
         </div>
+      </div>
+
+      {/* Monthly Allowance Interactive Widget */}
+      <div className="card" style={{ marginBottom: '24px', borderLeft: '4px solid var(--color-primary)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+          <div>
+            <h3 style={{ fontSize: '1.2rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              <span>💵</span> Monthly Pocket Money Allowance
+            </h3>
+            <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+              Period: {currentPeriod}
+            </span>
+          </div>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={openAllowanceModal}
+          >
+            {allowanceDetails?.hasAllowance ? '✏️ Edit Allowance' : '+ Set Monthly Allowance'}
+          </button>
+        </div>
+
+        {!allowanceDetails?.hasAllowance ? (
+          <div style={{ textAlign: 'center', padding: '24px 16px', background: 'var(--color-surface-subtle)', borderRadius: '8px' }}>
+            <p style={{ color: 'var(--color-text-muted)', marginBottom: '12px' }}>
+              No monthly allowance set for {currentPeriod}. Setting your expected allowance gives you realistic "Available to Spend" tracking and smart daily spend recommendations.
+            </p>
+            <button className="btn btn-primary btn-sm" onClick={openAllowanceModal}>
+              + Set Monthly Allowance
+            </button>
+          </div>
+        ) : (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+              <div style={{ padding: '12px', background: 'var(--color-surface-subtle)', borderRadius: '8px' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Monthly Allowance</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-main)', marginTop: '4px' }}>
+                  {formatINR(allowanceDetails.monthlyAllowancePaise)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Original allocation</div>
+              </div>
+
+              <div style={{ padding: '12px', background: 'var(--color-surface-subtle)', borderRadius: '8px' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Monthly Spent</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-danger, #ef4444)', marginTop: '4px' }}>
+                  {formatINR(allowanceDetails.monthlySpentPaise)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Actual expenses</div>
+              </div>
+
+              <div style={{ padding: '12px', background: 'var(--color-surface-subtle)', borderRadius: '8px' }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Savings Allocated</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-savings)', marginTop: '4px' }}>
+                  {formatINR(allowanceDetails.netSavingsAllocatedPaise)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>Net saved in goals</div>
+              </div>
+
+              <div style={{ padding: '12px', background: allowanceDetails.isOverspent ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', borderRadius: '8px', border: allowanceDetails.isOverspent ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)' }}>
+                <div style={{ fontSize: '0.78rem', color: allowanceDetails.isOverspent ? 'var(--color-danger)' : 'var(--color-primary)', textTransform: 'uppercase', fontWeight: 600 }}>Available to Spend</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: 800, color: allowanceDetails.isOverspent ? 'var(--color-danger)' : 'var(--color-primary)', marginTop: '4px' }}>
+                  {formatINR(allowanceDetails.availableToSpendPaise)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
+                  Allowance − Spent − Savings
+                </div>
+              </div>
+            </div>
+
+            {/* Segmented Consumption Bar */}
+            <div style={{ marginTop: '8px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', height: '10px', borderRadius: '999px', overflow: 'hidden', background: '#e2e8f0' }}>
+                <div
+                  style={{
+                    width: `${Math.min(100, Math.round((allowanceDetails.monthlySpentPaise / allowanceDetails.monthlyAllowancePaise) * 100))}%`,
+                    backgroundColor: '#ef4444',
+                    transition: 'width 0.3s'
+                  }}
+                  title={`Spent: ${formatINR(allowanceDetails.monthlySpentPaise)}`}
+                />
+                <div
+                  style={{
+                    width: `${Math.min(100 - Math.min(100, Math.round((allowanceDetails.monthlySpentPaise / allowanceDetails.monthlyAllowancePaise) * 100)), Math.round((Math.max(0, allowanceDetails.netSavingsAllocatedPaise) / allowanceDetails.monthlyAllowancePaise) * 100))}%`,
+                    backgroundColor: '#059669',
+                    transition: 'width 0.3s'
+                  }}
+                  title={`Savings: ${formatINR(allowanceDetails.netSavingsAllocatedPaise)}`}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+              <span>
+                {allowanceDetails.isOverspent
+                  ? `Over allowance by ${formatINR(Math.abs(allowanceDetails.rawRemainingAllowancePaise))}`
+                  : `${formatINR(allowanceDetails.availableToSpendPaise)} remaining (${100 - allowanceDetails.consumptionPct}% available)`}
+              </span>
+              {budget && (
+                <span>
+                  Budget Cap: {formatINR(budget.total_budget_paise)} ({formatINR(allowanceDetails.remainingBudgetPaise)} left)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Top 4 Financial Overview Cards */}
@@ -355,6 +510,62 @@ export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMoveme
           </div>
         )}
       </div>
+
+      {/* Modal: Set / Edit Monthly Allowance */}
+      {isAllowanceModalOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <h3>{allowanceDetails?.hasAllowance ? 'Edit Monthly Allowance' : 'Set Monthly Allowance'}</h3>
+              <button className="btn-close" onClick={() => setIsAllowanceModalOpen(false)}>×</button>
+            </div>
+            <form onSubmit={handleAllowanceSubmit}>
+              <div className="form-group">
+                <label className="form-label">Applicable Period</label>
+                <input type="text" className="form-control" value={currentPeriod} disabled style={{ background: '#f8fafc' }} />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="allowance-amount">Monthly Allowance (₹)</label>
+                <input
+                  id="allowance-amount"
+                  type="number"
+                  step="any"
+                  min="0"
+                  className="form-control"
+                  required
+                  placeholder="e.g. 5000"
+                  value={allowanceInput}
+                  onChange={(e) => setAllowanceInput(e.target.value)}
+                  autoFocus
+                />
+                <small style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
+                  The total pocket money or allowance expected for this month.
+                </small>
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="allowance-notes">Notes (Optional)</label>
+                <input
+                  id="allowance-notes"
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Allowance from parents"
+                  value={allowanceNotes}
+                  onChange={(e) => setAllowanceNotes(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setIsAllowanceModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={allowanceSaving}>
+                  {allowanceSaving ? 'Saving...' : 'Save Allowance'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
