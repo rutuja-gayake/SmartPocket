@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="128" fill="#173F35"/>
+  <path d="M128 176 C128 158 142 144 160 144 L352 144 C370 144 384 158 384 176 L384 336 C384 354 370 368 352 368 L160 368 C142 368 128 354 128 336 Z" fill="#E7EFE7" stroke="#A8B9A5" stroke-width="12"/>
+  <path d="M128 220 L384 220" stroke="#173F35" stroke-width="12" stroke-dasharray="16 12"/>
+  <rect x="290" y="240" width="80" height="56" rx="12" fill="#173F35"/>
+  <circle cx="316" cy="268" r="8" fill="#F8F7F2"/>
+  <!-- Rupee Symbol -->
+  <text x="210" y="295" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="bold" fill="#173F35" text-anchor="middle">₹</text>
+</svg>
+

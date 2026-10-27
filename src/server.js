@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'node:path';
+import fs from 'node:fs';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import { config } from './config/index.js';
@@ -41,9 +42,15 @@ export function createApp() {
   // General API rate limiting
   app.use('/api', apiRateLimiter);
 
-  // Serve static assets from public/ directory
-  const publicDir = path.join(config.rootDir, 'public');
-  app.use(express.static(publicDir));
+  // Serve static assets from frontend/dist (React+Vite) or fallback public/
+  const frontendDist = path.join(config.rootDir, 'frontend', 'dist');
+  const publicDir = fs.existsSync(frontendDist)
+    ? frontendDist
+    : path.join(config.rootDir, 'public');
+
+  if (fs.existsSync(publicDir)) {
+    app.use(express.static(publicDir));
+  }
 
   // Mount API endpoints
   app.use('/api/health', healthRouter);
@@ -55,10 +62,13 @@ export function createApp() {
   app.use('/api/sync', syncRouter);
   app.use('/api/advisor', advisorRouter);
 
-  // SPA fallback: Route non-API GET requests to public/index.html
+  // SPA fallback: Route non-API GET requests to index.html
   app.use((req, res, next) => {
     if (req.method === 'GET' && !req.path.startsWith('/api/')) {
-      return res.sendFile(path.join(publicDir, 'index.html'));
+      const indexPath = path.join(publicDir, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        return res.sendFile(indexPath);
+      }
     }
     if (req.path.startsWith('/api/')) {
       return res.status(404).json({ error: 'Endpoint not found.' });

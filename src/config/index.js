@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 dotenv.config();
@@ -8,12 +9,18 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '../../');
 
+const resolvedDbFile = process.env.DB_FILE || (
+  fs.existsSync(path.join(rootDir, 'data', 'smartpocket.db'))
+    ? path.join(rootDir, 'data', 'smartpocket.db')
+    : path.join(rootDir, 'backend', 'data', 'smartpocket.db')
+);
+
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3000', 10),
   host: process.env.HOST || '127.0.0.1',
   rootDir,
-  dbFile: process.env.DB_FILE || path.join(rootDir, 'data', 'smartpocket.db'),
+  dbFile: resolvedDbFile,
   session: {
     secret: process.env.SESSION_SECRET || 'smartpocket-dev-secret-key-32charsmin!',
     maxAgeMs: parseInt(process.env.SESSION_MAX_AGE_MS || '604800000', 10), // 7 days
