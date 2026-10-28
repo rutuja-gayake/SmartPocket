@@ -98,6 +98,8 @@ function getBudgetDetails(db, userId, period) {
   };
 
   const metrics503020 = calculate503020Metrics({
+    monthlyAllowancePaise,
+    allocationBasisPaise: monthlyAllowancePaise || (budget ? budget.total_budget_paise : 0),
     incomePaise: periodStats.income_paise,
     needsPaise: periodStats.needs_paise,
     wantsPaise: periodStats.wants_paise,
@@ -118,7 +120,8 @@ function getBudgetDetails(db, userId, period) {
     netSavingsTransfersPaise,
     periodStats,
     safeDaily: safeDailyInfo,
-    analysis503020: metrics503020
+    analysis503020: metrics503020,
+    rule503020: metrics503020
   };
 }
 

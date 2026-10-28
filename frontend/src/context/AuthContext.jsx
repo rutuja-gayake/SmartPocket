@@ -9,11 +9,11 @@ export function AuthProvider({ children }) {
   const [authError, setAuthError] = useState(null);
   const [pending2fa, setPending2fa] = useState(null);
 
-  const checkSession = useCallback(async () => {
+  const checkSession = useCallback(async (retryCount = 0) => {
     setAuthStatus('loading');
     setAuthError(null);
     try {
-      const res = await api.auth.me({ timeout: 5000 });
+      const res = await api.auth.me({ timeout: 6000 });
       if (res && res.user && res.user.id) {
         setCurrentUser(res.user);
         setAuthStatus('authenticated');
@@ -25,6 +25,9 @@ export function AuthProvider({ children }) {
       setCurrentUser(null);
       if (err.status === 401 || err.status === 403) {
         setAuthStatus('unauthenticated');
+      } else if (retryCount < 1) {
+        // Automatic retry after 1s for transient disconnects or startup delays
+        setTimeout(() => checkSession(retryCount + 1), 1000);
       } else {
         setAuthStatus('error');
         setAuthError(err.message || "We couldn't connect right now. Please check your internet connection and try again.");

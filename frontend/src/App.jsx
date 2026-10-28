@@ -32,6 +32,12 @@ export default function App() {
 
   const triggerRefresh = () => setRefreshTrigger(prev => prev + 1);
 
+  useEffect(() => {
+    const handleDataChanged = () => triggerRefresh();
+    window.addEventListener('smartpocket:data_changed', handleDataChanged);
+    return () => window.removeEventListener('smartpocket:data_changed', handleDataChanged);
+  }, []);
+
   // 1. Loading Session Verification State
   if (authStatus === 'loading') {
     return (

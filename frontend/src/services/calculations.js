@@ -224,40 +224,153 @@ export function calculateSafeDailySpending({
 
 export function calculate503020Metrics({
   incomePaise = 0,
+  monthlyAllowancePaise = 0,
+  allocationBasisPaise = 0,
   needsPaise = 0,
   wantsPaise = 0,
   savingsPaise = 0,
-  targets = { needsPct: 50, wantsPct: 30, savingsPct: 20 }
-}) {
-  const totalExpensePaise = needsPaise + wantsPaise;
-  const baseForPct = incomePaise > 0 ? incomePaise : totalExpensePaise;
+  transactions = null,
+  targets = { needsPct: 50, wantsPct: 30, savingsPct: 20 },
+  budgetRule = null
+} = {}) {
+  let calcNeeds = Math.max(0, needsPaise || 0);
+  let calcWants = Math.max(0, wantsPaise || 0);
+  let calcSavings = savingsPaise || 0;
+  let calcIncome = Math.max(0, incomePaise || 0);
 
-  const actualNeedsPct = baseForPct > 0 ? Math.round((needsPaise / baseForPct) * 100) : 0;
-  const actualWantsPct = baseForPct > 0 ? Math.round((wantsPaise / baseForPct) * 100) : 0;
-  const actualSavingsPct = incomePaise > 0 ? Math.round((savingsPaise / incomePaise) * 100) : 0;
+  if (Array.isArray(transactions) && transactions.length > 0) {
+    let tNeeds = 0;
+    let tWants = 0;
+    let tSavings = 0;
+    let tIncome = 0;
+    for (const t of transactions) {
+      const amt = Number(t.amount_paise ?? (t.amount ? Math.round(Number(t.amount) * 100) : 0));
+      const type = t.type;
+      const cls = t.classification || (type === 'transfer_savings' ? 'savings' : type === 'income' ? 'income' : 'need');
 
-  const targetNeedsPaise = incomePaise > 0 ? Math.round(incomePaise * (targets.needsPct / 100)) : 0;
-  const targetWantsPaise = incomePaise > 0 ? Math.round(incomePaise * (targets.wantsPct / 100)) : 0;
-  const targetSavingsPaise = incomePaise > 0 ? Math.round(incomePaise * (targets.savingsPct / 100)) : 0;
+      if (type === 'income') {
+        tIncome += amt;
+      } else if (type === 'transfer_savings') {
+        tSavings += amt;
+      } else if (type === 'expense') {
+        if (cls === 'want') {
+          tWants += amt;
+        } else if (cls === 'savings') {
+          tSavings += amt;
+        } else {
+          tNeeds += amt;
+        }
+      }
+    }
+
+    if (needsPaise === 0 && tNeeds > 0) calcNeeds = tNeeds;
+    if (wantsPaise === 0 && tWants > 0) calcWants = tWants;
+    if (savingsPaise === 0 && tSavings !== 0) calcSavings = tSavings;
+    if (incomePaise === 0 && tIncome > 0) calcIncome = tIncome;
+  }
+
+  const effectiveTargets = {
+    needsPct: budgetRule?.needs_target_pct ?? targets?.needsPct ?? 50,
+    wantsPct: budgetRule?.wants_target_pct ?? targets?.wantsPct ?? 30,
+    savingsPct: budgetRule?.savings_target_pct ?? targets?.savingsPct ?? 20
+  };
+
+  const totalExpensePaise = calcNeeds + calcWants;
+
+  // Primary allocation basis: monthly allowance, then explicit basis, then income, then budget, then total expenses
+  const basisPaise = Math.max(
+    0,
+    monthlyAllowancePaise ||
+    allocationBasisPaise ||
+    calcIncome ||
+    (budgetRule?.total_budget_paise || 0) ||
+    totalExpensePaise
+  );
+
+  const targetNeedsPaise = basisPaise > 0 ? Math.round(basisPaise * (effectiveTargets.needsPct / 100)) : 0;
+  const targetWantsPaise = basisPaise > 0 ? Math.round(basisPaise * (effectiveTargets.wantsPct / 100)) : 0;
+  const targetSavingsPaise = basisPaise > 0 ? Math.round(basisPaise * (effectiveTargets.savingsPct / 100)) : 0;
+
+  // Percentage of total basis (traditional 50/30/20 share)
+  const actualNeedsPct = basisPaise > 0 ? Math.round((calcNeeds / basisPaise) * 100) : 0;
+  const actualWantsPct = basisPaise > 0 ? Math.round((calcWants / basisPaise) * 100) : 0;
+  const actualSavingsPct = basisPaise > 0 ? Math.round((Math.max(0, calcSavings) / basisPaise) * 100) : 0;
+
+  // Percentage of each specific target used
+  const targetUsedNeedsPct = targetNeedsPaise > 0 ? Math.round((calcNeeds / targetNeedsPaise) * 100) : 0;
+  const targetUsedWantsPct = targetWantsPaise > 0 ? Math.round((calcWants / targetWantsPaise) * 100) : 0;
+  const targetUsedSavingsPct = targetSavingsPaise > 0 ? Math.round((Math.max(0, calcSavings) / targetSavingsPaise) * 100) : 0;
+
+  const needsProgressPct = Math.min(100, Math.max(0, targetUsedNeedsPct));
+  const wantsProgressPct = Math.min(100, Math.max(0, targetUsedWantsPct));
+  const savingsProgressPct = Math.min(100, Math.max(0, targetUsedSavingsPct));
+
+  const remainingNeedsPaise = targetNeedsPaise - calcNeeds;
+  const remainingWantsPaise = targetWantsPaise - calcWants;
+  const remainingSavingsPaise = targetSavingsPaise - calcSavings;
+
+  const isNeedsOverTarget = targetNeedsPaise > 0 && calcNeeds > targetNeedsPaise;
+  const isWantsOverTarget = targetWantsPaise > 0 && calcWants > targetWantsPaise;
+  const isSavingsAchieved = targetSavingsPaise > 0 && calcSavings >= targetSavingsPaise;
+
+  const needsStatus = isNeedsOverTarget ? 'OVER_TARGET' : (targetUsedNeedsPct >= 85 ? 'NEAR_LIMIT' : 'HEALTHY');
+  const wantsStatus = isWantsOverTarget ? 'OVER_TARGET' : (targetUsedWantsPct >= 85 ? 'NEAR_LIMIT' : 'HEALTHY');
+  const savingsStatus = isSavingsAchieved ? 'ACHIEVED' : (targetUsedSavingsPct >= 50 ? 'ON_TRACK' : 'BUILDING');
 
   return {
-    baseAmountPaise: baseForPct,
-    hasIncome: incomePaise > 0,
-    targets,
+    baseAmountPaise: basisPaise,
+    allocationBasisPaise: basisPaise,
+    hasIncome: basisPaise > 0,
+    targets: {
+      needsPct: effectiveTargets.needsPct,
+      wantsPct: effectiveTargets.wantsPct,
+      savingsPct: effectiveTargets.savingsPct,
+      needsPaise: targetNeedsPaise,
+      wantsPaise: targetWantsPaise,
+      savingsPaise: targetSavingsPaise,
+      targetNeedsPaise,
+      targetWantsPaise,
+      targetSavingsPaise
+    },
     actual: {
-      needsPaise,
-      wantsPaise,
-      savingsPaise,
+      needsPaise: calcNeeds,
+      wantsPaise: calcWants,
+      savingsPaise: calcSavings,
       totalExpensePaise,
       actualNeedsPct,
       actualWantsPct,
-      actualSavingsPct
+      actualSavingsPct,
+      targetUsedNeedsPct,
+      targetUsedWantsPct,
+      targetUsedSavingsPct
     },
     deviations: {
-      needsDiffPaise: targetNeedsPaise - needsPaise,
-      wantsDiffPaise: targetWantsPaise - wantsPaise,
-      isWantsOverTarget: incomePaise > 0 && wantsPaise > targetWantsPaise
-    }
+      needsDiffPaise: remainingNeedsPaise,
+      wantsDiffPaise: remainingWantsPaise,
+      savingsDiffPaise: calcSavings - targetSavingsPaise,
+      isNeedsOverTarget,
+      isWantsOverTarget,
+      isSavingsAchieved
+    },
+    // Top-level convenient aliases for direct UI rendering
+    actualNeedsPaise: calcNeeds,
+    actualWantsPaise: calcWants,
+    actualSavingsPaise: calcSavings,
+    targetNeedsPaise,
+    targetWantsPaise,
+    targetSavingsPaise,
+    targetUsedNeedsPct,
+    targetUsedWantsPct,
+    targetUsedSavingsPct,
+    needsProgressPct,
+    wantsProgressPct,
+    savingsProgressPct,
+    remainingNeedsPaise,
+    remainingWantsPaise,
+    remainingSavingsPaise,
+    needsStatus,
+    wantsStatus,
+    savingsStatus
   };
 }
 

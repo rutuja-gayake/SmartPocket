@@ -6,16 +6,31 @@ import { useToast } from '../components/Toast';
 export default function TransactionsPage({ currentPeriod, onOpenAddTx }) {
   const { showToast } = useToast();
   const [transactions, setTransactions] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [classFilter, setClassFilter] = useState('');
 
+  // Edit Modal State
+  const [editingTx, setEditingTx] = useState(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editType, setEditType] = useState('expense');
+  const [editCategory, setEditCategory] = useState('');
+  const [editClassification, setEditClassification] = useState('need');
+  const [editDescription, setEditDescription] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const loadTxs = async () => {
     setLoading(true);
     try {
-      const res = await api.transactions.list(`period=${currentPeriod}`);
-      setTransactions(res.transactions || []);
+      const [txRes, catRes] = await Promise.all([
+        api.transactions.list(`period=${currentPeriod}`),
+        api.categories.list().catch(() => ({ categories: [] }))
+      ]);
+      setTransactions(txRes.transactions || []);
+      if (catRes?.categories) setCategories(catRes.categories);
     } catch (err) {
       showToast(err.message || 'Failed to load transactions.', 'error');
     } finally {
@@ -33,8 +48,73 @@ export default function TransactionsPage({ currentPeriod, onOpenAddTx }) {
       await api.transactions.delete(id);
       showToast('Transaction deleted successfully.', 'info');
       setTransactions(prev => prev.filter(t => t.id !== id));
+      window.dispatchEvent(new CustomEvent('smartpocket:data_changed'));
     } catch (err) {
       showToast(err.message || 'Failed to delete transaction.', 'error');
+    }
+  };
+
+  const handleOpenEdit = (tx) => {
+    setEditingTx(tx);
+    setEditAmount(String((tx.amount_paise || 0) / 100));
+    setEditType(tx.type || 'expense');
+    setEditCategory(tx.category_name || '');
+    setEditClassification(tx.classification || 'need');
+    setEditDescription(tx.description || '');
+    setEditDate(tx.date || new Date().toISOString().slice(0, 10));
+  };
+
+  const handleCategorySelect = (e) => {
+    const selected = e.target.value;
+    setEditCategory(selected);
+    const cat = categories.find(c => c.name === selected);
+    if (cat) {
+      if (cat.type === 'savings' || selected === 'Savings Goal Deposit') {
+        setEditType('transfer_savings');
+        setEditClassification('savings');
+      } else if (cat.type === 'income') {
+        setEditType('income');
+        setEditClassification('income');
+      } else if (cat.type === 'need') {
+        setEditType('expense');
+        setEditClassification('need');
+      } else if (cat.type === 'want') {
+        setEditType('expense');
+        setEditClassification('want');
+      }
+    }
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editAmount || isNaN(Number(editAmount)) || Number(editAmount) <= 0) {
+      showToast('Please enter a valid amount greater than zero.', 'error');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const selectedCat = categories.find(c => c.name === editCategory);
+      const res = await api.transactions.update(editingTx.id, {
+        amount: Number(editAmount),
+        type: editType,
+        category_id: selectedCat?.id || null,
+        category_name: editCategory,
+        classification: editClassification,
+        description: editDescription,
+        date: editDate
+      });
+
+      const updated = res.transaction;
+      setTransactions(prev => prev.map(t => t.id === editingTx.id ? (updated || { ...t, ...reqPayload }) : t));
+      setEditingTx(null);
+      showToast('Transaction updated successfully!', 'success');
+      window.dispatchEvent(new CustomEvent('smartpocket:data_changed'));
+      loadTxs();
+    } catch (err) {
+      showToast(err.message || 'Failed to update transaction.', 'error');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -124,7 +204,14 @@ export default function TransactionsPage({ currentPeriod, onOpenAddTx }) {
                   <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700, color: tx.type === 'income' ? 'var(--color-primary)' : tx.type === 'transfer_savings' ? 'var(--color-savings)' : 'var(--color-danger)' }}>
                     {tx.type === 'income' ? '+' : '-'}{formatINR(tx.amount_paise)}
                   </td>
-                  <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                  <td style={{ padding: '10px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '4px 8px', fontSize: '0.75rem', marginRight: '6px' }}
+                      onClick={() => handleOpenEdit(tx)}
+                    >
+                      ✏️ Edit
+                    </button>
                     <button
                       className="btn btn-secondary btn-sm"
                       style={{ padding: '4px 8px', fontSize: '0.75rem', color: 'var(--color-danger)' }}
@@ -137,6 +224,125 @@ export default function TransactionsPage({ currentPeriod, onOpenAddTx }) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Edit Transaction Modal */}
+      {Boolean(editingTx) && (
+        <div className="modal-overlay active" style={{ display: 'flex' }} onClick={() => setEditingTx(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Edit Transaction</h3>
+              <button className="modal-close" onClick={() => setEditingTx(null)}>&times;</button>
+            </div>
+
+            <form onSubmit={handleSaveEdit}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-tx-amount">Amount (₹)</label>
+                <input
+                  id="edit-tx-amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  className="form-control"
+                  required
+                  value={editAmount}
+                  onChange={e => setEditAmount(e.target.value)}
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="edit-tx-type">Type</label>
+                  <select
+                    id="edit-tx-type"
+                    className="form-control"
+                    value={editType}
+                    onChange={e => setEditType(e.target.value)}
+                  >
+                    <option value="expense">Expense</option>
+                    <option value="income">Income / Allowance</option>
+                    <option value="transfer_savings">Savings Transfer</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="edit-tx-category">Category</label>
+                  <select
+                    id="edit-tx-category"
+                    className="form-control"
+                    value={editCategory}
+                    onChange={handleCategorySelect}
+                  >
+                    {categories.length > 0 ? (
+                      categories.map(c => (
+                        <option key={c.id || c.name} value={c.name}>{c.name} ({c.type})</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Food & Groceries">Food & Groceries</option>
+                        <option value="Hostel & Rent">Hostel & Rent</option>
+                        <option value="Cafes & Hangouts">Cafes & Hangouts</option>
+                        <option value="Pocket Money / Allowance">Pocket Money / Allowance</option>
+                        <option value="Savings Goal Deposit">Savings Goal Deposit</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="edit-tx-class">50/30/20 Classification</label>
+                  <select
+                    id="edit-tx-class"
+                    className="form-control"
+                    value={editClassification}
+                    onChange={e => setEditClassification(e.target.value)}
+                  >
+                    <option value="need">Essential Need (50%)</option>
+                    <option value="want">Discretionary Want (30%)</option>
+                    <option value="savings">Savings Allocation (20%)</option>
+                    <option value="income">Income / Inflow</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="edit-tx-date">Date</label>
+                  <input
+                    id="edit-tx-date"
+                    type="date"
+                    className="form-control"
+                    required
+                    value={editDate}
+                    onChange={e => setEditDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-tx-desc">Description / Note</label>
+                <input
+                  id="edit-tx-desc"
+                  type="text"
+                  className="form-control"
+                  placeholder="Optional details..."
+                  value={editDescription}
+                  onChange={e => setEditDescription(e.target.value)}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={savingEdit}>
+                  {savingEdit ? 'Saving Changes...' : 'Save Changes'}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingTx(null)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

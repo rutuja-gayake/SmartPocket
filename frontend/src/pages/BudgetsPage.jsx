@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 export default function BudgetsPage({ currentPeriod, setCurrentPeriod }) {
   const { showToast } = useToast();
   const [budget, setBudget] = useState(null);
+  const [allowance, setAllowance] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [totalBudget, setTotalBudget] = useState('');
   const [needsPct, setNeedsPct] = useState(50);
@@ -17,14 +18,16 @@ export default function BudgetsPage({ currentPeriod, setCurrentPeriod }) {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [bRes, txRes] = await Promise.all([
+      const [bRes, txRes, allowRes] = await Promise.all([
         api.budgets.get(currentPeriod).catch(() => ({ budget: null })),
-        api.transactions.list(`period=${currentPeriod}`).catch(() => ({ transactions: [] }))
+        api.transactions.list(`period=${currentPeriod}`).catch(() => ({ transactions: [] })),
+        api.allowances.get(currentPeriod).catch(() => ({ hasAllowance: false, monthlyAllowancePaise: 0 }))
       ]);
 
       const b = bRes.budget;
       setBudget(b);
       setTransactions(txRes.transactions || []);
+      setAllowance(allowRes);
 
       if (b) {
         setTotalBudget(String(b.total_budget_paise / 100));
@@ -77,18 +80,40 @@ export default function BudgetsPage({ currentPeriod, setCurrentPeriod }) {
 
   let totalIncomePaise = 0;
   let totalExpensePaise = 0;
+  let needsExpensePaise = 0;
+  let wantsExpensePaise = 0;
+  let netSavingsPaise = 0;
+
   transactions.forEach(t => {
-    if (t.type === 'income') totalIncomePaise += t.amount_paise;
-    if (t.type === 'expense') totalExpensePaise += t.amount_paise;
+    const amt = Number(t.amount_paise || (t.amount ? Math.round(Number(t.amount) * 100) : 0));
+    if (t.type === 'income') {
+      totalIncomePaise += amt;
+    } else if (t.type === 'transfer_savings') {
+      netSavingsPaise += amt;
+    } else if (t.type === 'expense') {
+      totalExpensePaise += amt;
+      if (t.classification === 'want') {
+        wantsExpensePaise += amt;
+      } else if (t.classification === 'savings') {
+        netSavingsPaise += amt;
+      } else {
+        needsExpensePaise += amt;
+      }
+    }
   });
 
   const rule503020 = calculate503020Metrics({
-    totalIncomePaise,
+    monthlyAllowancePaise: allowance?.monthlyAllowancePaise || 0,
+    allocationBasisPaise: allowance?.monthlyAllowancePaise || (budget ? budget.total_budget_paise : 0),
+    incomePaise: totalIncomePaise,
+    needsPaise: needsExpensePaise,
+    wantsPaise: wantsExpensePaise,
+    savingsPaise: allowance?.netSavingsAllocatedPaise ?? netSavingsPaise,
     transactions,
-    budgetRule: budget || {
-      needs_target_pct: Number(needsPct),
-      wants_target_pct: Number(wantsPct),
-      savings_target_pct: Number(savingsPct)
+    targets: {
+      needsPct: Number(needsPct),
+      wantsPct: Number(wantsPct),
+      savingsPct: Number(savingsPct)
     }
   });
 
@@ -208,60 +233,151 @@ export default function BudgetsPage({ currentPeriod, setCurrentPeriod }) {
       </div>
 
       {/* 50/30/20 Guidelines Breakdown */}
-      <h3 style={{ fontSize: '1.2rem', color: 'var(--color-primary)', marginBottom: '16px' }}>
-        50/30/20 Student Rule Analysis
-      </h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+        <div>
+          <h3 style={{ fontSize: '1.2rem', color: 'var(--color-primary)', margin: 0 }}>
+            50/30/20 Student Rule Analysis
+          </h3>
+          <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+            Suggested spending & savings allocations based on your {allowance?.monthlyAllowancePaise > 0 ? `₹${(allowance.monthlyAllowancePaise / 100).toFixed(0)} monthly allowance` : (totalIncomePaise > 0 ? `₹${(totalIncomePaise / 100).toFixed(0)} income` : `₹${(budgetPaise / 100).toFixed(0)} spending cap`)}.
+          </p>
+        </div>
+        <span className="badge-tag" style={{ background: 'var(--color-surface-subtle)', fontWeight: 600 }}>
+          Basis: {formatINR(rule503020.baseAmountPaise)}
+        </span>
+      </div>
 
       <div className="grid-cards-3">
         {/* Needs Card */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <h4 style={{ color: 'var(--color-primary)' }}>Essential Needs (50%)</h4>
-            <span className={`status-badge ${rule503020.needsStatus === 'HEALTHY' ? 'healthy' : 'caution'}`}>
-              {rule503020.needsStatus}
+            <h4 style={{ color: 'var(--color-primary)', margin: 0 }}>Essential Needs ({rule503020.targets.needsPct}%)</h4>
+            <span className={`status-badge ${rule503020.needsStatus === 'HEALTHY' ? 'healthy' : rule503020.needsStatus === 'NEAR_LIMIT' ? 'near_limit' : 'budget_exceeded'}`}>
+              {rule503020.needsStatus === 'HEALTHY' ? 'Healthy' : rule503020.needsStatus === 'NEAR_LIMIT' ? 'Near Limit' : 'Over Target'}
             </span>
           </div>
           <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
             Mess, rent, books, groceries, transport
           </p>
-          <div className="card-value">{formatINR(rule503020.actualNeedsPaise)}</div>
-          <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
-            Target: {formatINR(rule503020.targetNeedsPaise)} ({rule503020.actualNeedsPct}% of pocket money)
-          </p>
+          <div className="card-value" style={{ fontSize: '1.6rem', fontWeight: 800 }}>
+            {formatINR(rule503020.actualNeedsPaise)}
+          </div>
+          <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+            Target: <strong>{formatINR(rule503020.targetNeedsPaise)}</strong> ({rule503020.targetUsedNeedsPct}% of target used)
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ background: 'var(--color-surface-subtle)', borderRadius: '999px', height: '8px', overflow: 'hidden', margin: '12px 0 8px' }}>
+            <div style={{
+              background: rule503020.needsStatus === 'OVER_TARGET' ? 'var(--color-danger)' : rule503020.needsStatus === 'NEAR_LIMIT' ? 'var(--color-warning, #f59e0b)' : 'var(--color-primary)',
+              width: `${Math.min(100, rule503020.targetUsedNeedsPct)}%`,
+              height: '100%',
+              transition: 'width 0.4s ease'
+            }}></div>
+          </div>
+
+          <div style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {rule503020.actualNeedsPaise > rule503020.targetNeedsPaise ? (
+              <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
+                Over target by {formatINR(rule503020.actualNeedsPaise - rule503020.targetNeedsPaise)}
+              </span>
+            ) : (
+              <span style={{ color: 'var(--color-text-muted)' }}>
+                {formatINR(rule503020.remainingNeedsPaise)} remaining
+              </span>
+            )}
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+              {rule503020.actual.actualNeedsPct}% of pocket money
+            </span>
+          </div>
         </div>
 
         {/* Wants Card */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <h4 style={{ color: '#f59e0b' }}>Discretionary Wants (30%)</h4>
-            <span className={`status-badge ${rule503020.wantsStatus === 'HEALTHY' ? 'healthy' : 'caution'}`}>
-              {rule503020.wantsStatus}
+            <h4 style={{ color: '#d97706', margin: 0 }}>Discretionary Wants ({rule503020.targets.wantsPct}%)</h4>
+            <span className={`status-badge ${rule503020.wantsStatus === 'HEALTHY' ? 'healthy' : rule503020.wantsStatus === 'NEAR_LIMIT' ? 'near_limit' : 'budget_exceeded'}`}>
+              {rule503020.wantsStatus === 'HEALTHY' ? 'Healthy' : rule503020.wantsStatus === 'NEAR_LIMIT' ? 'Near Limit' : 'Over Target'}
             </span>
           </div>
           <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
             Cafes, movies, hangouts, subscriptions
           </p>
-          <div className="card-value">{formatINR(rule503020.actualWantsPaise)}</div>
-          <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
-            Target: {formatINR(rule503020.targetWantsPaise)} ({rule503020.actualWantsPct}% of pocket money)
-          </p>
+          <div className="card-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: '#d97706' }}>
+            {formatINR(rule503020.actualWantsPaise)}
+          </div>
+          <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+            Target: <strong>{formatINR(rule503020.targetWantsPaise)}</strong> ({rule503020.targetUsedWantsPct}% of target used)
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ background: 'var(--color-surface-subtle)', borderRadius: '999px', height: '8px', overflow: 'hidden', margin: '12px 0 8px' }}>
+            <div style={{
+              background: rule503020.wantsStatus === 'OVER_TARGET' ? 'var(--color-danger)' : rule503020.wantsStatus === 'NEAR_LIMIT' ? 'var(--color-warning, #f59e0b)' : '#d97706',
+              width: `${Math.min(100, rule503020.targetUsedWantsPct)}%`,
+              height: '100%',
+              transition: 'width 0.4s ease'
+            }}></div>
+          </div>
+
+          <div style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {rule503020.actualWantsPaise > rule503020.targetWantsPaise ? (
+              <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
+                Over target by {formatINR(rule503020.actualWantsPaise - rule503020.targetWantsPaise)}
+              </span>
+            ) : (
+              <span style={{ color: 'var(--color-text-muted)' }}>
+                {formatINR(rule503020.remainingWantsPaise)} remaining
+              </span>
+            )}
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+              {rule503020.actual.actualWantsPct}% of pocket money
+            </span>
+          </div>
         </div>
 
         {/* Savings Card */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <h4 style={{ color: 'var(--color-savings)' }}>Savings & Goals (20%)</h4>
-            <span className={`status-badge ${rule503020.savingsStatus === 'HEALTHY' ? 'healthy' : 'near_limit'}`}>
-              {rule503020.savingsStatus}
+            <h4 style={{ color: 'var(--color-savings)', margin: 0 }}>Savings & Goals ({rule503020.targets.savingsPct}%)</h4>
+            <span className={`status-badge ${rule503020.savingsStatus === 'ACHIEVED' ? 'healthy' : 'near_limit'}`}>
+              {rule503020.savingsStatus === 'ACHIEVED' ? 'Target Achieved' : rule503020.savingsStatus === 'ON_TRACK' ? 'On Track' : 'Building'}
             </span>
           </div>
           <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: '12px' }}>
             Emergency fund, electronics, future trips
           </p>
-          <div className="card-value">{formatINR(rule503020.actualSavingsPaise)}</div>
-          <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
-            Target: {formatINR(rule503020.targetSavingsPaise)} ({rule503020.actualSavingsPct}% of pocket money)
-          </p>
+          <div className="card-value" style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-savings)' }}>
+            {formatINR(rule503020.actualSavingsPaise)}
+          </div>
+          <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+            Target: <strong>{formatINR(rule503020.targetSavingsPaise)}</strong> ({rule503020.targetUsedSavingsPct}% of target saved)
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ background: 'var(--color-surface-subtle)', borderRadius: '999px', height: '8px', overflow: 'hidden', margin: '12px 0 8px' }}>
+            <div style={{
+              background: 'var(--color-savings)',
+              width: `${Math.min(100, rule503020.targetUsedSavingsPct)}%`,
+              height: '100%',
+              transition: 'width 0.4s ease'
+            }}></div>
+          </div>
+
+          <div style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {rule503020.actualSavingsPaise >= rule503020.targetSavingsPaise && rule503020.targetSavingsPaise > 0 ? (
+              <span style={{ color: 'var(--color-savings)', fontWeight: 600 }}>
+                Target met! (+{formatINR(rule503020.actualSavingsPaise - rule503020.targetSavingsPaise)} surplus)
+              </span>
+            ) : (
+              <span style={{ color: 'var(--color-text-muted)' }}>
+                {formatINR(Math.max(0, rule503020.remainingSavingsPaise))} to reach target
+              </span>
+            )}
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+              {rule503020.actual.actualSavingsPct}% of pocket money
+            </span>
+          </div>
         </div>
       </div>
     </div>

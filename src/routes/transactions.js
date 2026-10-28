@@ -156,6 +156,28 @@ transactionsRouter.post('/', requireAuth, (req, res) => {
       resolvedClassification = 'savings';
     }
 
+    let resolvedCategoryId = category_id || null;
+    if (category_name) {
+      const cat = db.prepare('SELECT id, type FROM categories WHERE name = ? AND (user_id IS NULL OR user_id = ?)').get(category_name.trim(), req.user.id);
+      if (cat) {
+        if (!resolvedCategoryId) resolvedCategoryId = cat.id;
+        if (!resolvedClassification && cat.type) {
+          resolvedClassification = cat.type;
+        }
+      }
+    }
+
+    if (!resolvedClassification) {
+      const lower = category_name.toLowerCase();
+      if (/cafe|coffee|movie|entertainment|game|shopping|apparel|travel|outing|party|dining|sub/.test(lower)) {
+        resolvedClassification = 'want';
+      } else if (/food|grocery|rent|hostel|book|stationery|fee|tuition|medic|health|transport|commute|bus|train/.test(lower)) {
+        resolvedClassification = 'need';
+      } else {
+        resolvedClassification = 'want'; // do not silently classify unknown as essential need
+      }
+    }
+
     db.exec('BEGIN TRANSACTION;');
     try {
       // Check if transaction ID already exists for this user (prevent duplicate sync/resubmission)
@@ -178,7 +200,7 @@ transactionsRouter.post('/', requireAuth, (req, res) => {
         req.user.id,
         amountPaise,
         resolvedType,
-        category_id || null,
+        resolvedCategoryId,
         category_name.trim(),
         resolvedClassification,
         description.trim(),
@@ -255,8 +277,21 @@ transactionsRouter.patch('/:id', requireAuth, (req, res) => {
       params.push(category_id);
     }
     if (category_name !== undefined) {
+      const catTrim = category_name.trim();
       updates.push('category_name = ?');
-      params.push(category_name.trim());
+      params.push(catTrim);
+
+      if (category_id === undefined) {
+        const cat = db.prepare('SELECT id, type FROM categories WHERE name = ? AND (user_id IS NULL OR user_id = ?)').get(catTrim, req.user.id);
+        if (cat) {
+          updates.push('category_id = ?');
+          params.push(cat.id);
+          if (classification === undefined && cat.type) {
+            updates.push('classification = ?');
+            params.push(cat.type);
+          }
+        }
+      }
     }
     if (classification !== undefined) {
       updates.push('classification = ?');

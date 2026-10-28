@@ -113,7 +113,12 @@ export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMoveme
     });
 
     const rule503020 = calculate503020Metrics({
-      totalIncomePaise: incomePaise,
+      monthlyAllowancePaise: allowanceDetails?.monthlyAllowancePaise || 0,
+      allocationBasisPaise: allowanceDetails?.monthlyAllowancePaise || (budget ? budget.total_budget_paise : 0),
+      incomePaise,
+      needsPaise: txsRes?.summary?.needs_expense_paise,
+      wantsPaise: txsRes?.summary?.wants_expense_paise,
+      savingsPaise: allowanceDetails?.netSavingsAllocatedPaise,
       transactions,
       budgetRule: budget || { needs_target_pct: 50, wants_target_pct: 30, savings_target_pct: 20 }
     });

@@ -54,8 +54,14 @@ export default function AddTransactionModal({ isOpen, onClose, onSuccess }) {
       setCategoryName('Savings Goal Deposit');
     } else if (newType === 'income') {
       setClassification('income');
-    } else if (newType === 'expense' && classification === 'income') {
-      setClassification('need');
+      setCategoryName('Pocket Money / Allowance');
+    } else if (newType === 'expense') {
+      if (classification === 'income' || classification === 'savings') {
+        setClassification('need');
+      }
+      if (categoryName === 'Pocket Money / Allowance' || categoryName === 'Savings Goal Deposit') {
+        setCategoryName('Food & Groceries');
+      }
     }
   };
 
@@ -66,11 +72,14 @@ export default function AddTransactionModal({ isOpen, onClose, onSuccess }) {
       return;
     }
 
+    const selectedCat = categories.find(c => c.name === categoryName);
+
     setLoading(true);
     try {
       await api.transactions.create({
         amount: Number(amount),
         type,
+        category_id: selectedCat?.id || null,
         category_name: categoryName,
         classification,
         description,

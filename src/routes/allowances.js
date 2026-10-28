@@ -8,7 +8,8 @@ import { validatePeriod } from '../validators/index.js';
 import {
   calculateAvailableBalance,
   calculateAvailableToSpend,
-  calculateSafeDailySpending
+  calculateSafeDailySpending,
+  calculate503020Metrics
 } from '../services/calculations.js';
 
 export const allowancesRouter = express.Router();
@@ -37,6 +38,8 @@ export function getAllowanceDetails(db, userId, period) {
     SELECT
       COALESCE(SUM(CASE WHEN type = 'income' THEN amount_paise ELSE 0 END), 0) AS income_paise,
       COALESCE(SUM(CASE WHEN type = 'expense' THEN amount_paise ELSE 0 END), 0) AS expense_paise,
+      COALESCE(SUM(CASE WHEN classification = 'need' AND type = 'expense' THEN amount_paise ELSE 0 END), 0) AS needs_expense_paise,
+      COALESCE(SUM(CASE WHEN classification = 'want' AND type = 'expense' THEN amount_paise ELSE 0 END), 0) AS wants_expense_paise,
       COALESCE(SUM(CASE WHEN type = 'transfer_savings' AND amount_paise > 0 THEN amount_paise ELSE 0 END), 0) AS savings_deposits_paise,
       COALESCE(SUM(CASE WHEN type = 'transfer_savings' AND amount_paise < 0 THEN ABS(amount_paise) ELSE 0 END), 0) AS savings_withdrawals_paise,
       COALESCE(SUM(CASE WHEN type = 'transfer_savings' THEN amount_paise ELSE 0 END), 0) AS net_savings_allocated_paise,
@@ -113,6 +116,23 @@ export function getAllowanceDetails(db, userId, period) {
     ORDER BY total_paise DESC
   `).all(userId, period);
 
+  // 50/30/20 guideline metrics
+  const targets = {
+    needsPct: budget ? budget.needs_target_pct : 50,
+    wantsPct: budget ? budget.wants_target_pct : 30,
+    savingsPct: budget ? budget.savings_target_pct : 20
+  };
+
+  const metrics503020 = calculate503020Metrics({
+    monthlyAllowancePaise,
+    allocationBasisPaise: monthlyAllowancePaise || (budget ? budget.total_budget_paise : 0),
+    incomePaise: periodStats.income_paise,
+    needsPaise: periodStats.needs_expense_paise,
+    wantsPaise: periodStats.wants_expense_paise,
+    savingsPaise: netSavingsAllocatedPaise,
+    targets
+  });
+
   return {
     period,
     allowance: allowance || null,
@@ -132,6 +152,7 @@ export function getAllowanceDetails(db, userId, period) {
     remainingBudgetPaise,
     budget: budget || null,
     safeDaily,
+    metrics503020,
     categorySpending
   };
 }
@@ -176,6 +197,27 @@ allowancesRouter.get('/history', requireAuth, (req, res) => {
   } catch (err) {
     console.error('Fetch allowance history error:', err);
     return res.status(500).json({ error: 'Failed to retrieve allowance history.' });
+  }
+});
+
+/**
+ * GET /api/allowances/:period
+ */
+allowancesRouter.get('/:period', requireAuth, (req, res) => {
+  try {
+    const db = getDb();
+    const userId = req.user.id;
+    const period = req.params.period;
+
+    if (!validatePeriod(period)) {
+      return res.status(400).json({ error: 'Period must be in YYYY-MM format.' });
+    }
+
+    const details = getAllowanceDetails(db, userId, period);
+    return res.json(details);
+  } catch (err) {
+    console.error('Fetch allowance error:', err);
+    return res.status(500).json({ error: 'Failed to retrieve monthly allowance details.' });
   }
 });
 
