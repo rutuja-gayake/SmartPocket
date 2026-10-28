@@ -95,7 +95,7 @@ export default function TransactionsPage({ currentPeriod, onOpenAddTx }) {
     setSavingEdit(true);
     try {
       const selectedCat = categories.find(c => c.name === editCategory);
-      const res = await api.transactions.update(editingTx.id, {
+      const payload = {
         amount: Number(editAmount),
         type: editType,
         category_id: selectedCat?.id || null,
@@ -103,10 +103,11 @@ export default function TransactionsPage({ currentPeriod, onOpenAddTx }) {
         classification: editClassification,
         description: editDescription,
         date: editDate
-      });
+      };
+      const res = await api.transactions.update(editingTx.id, payload);
 
       const updated = res.transaction;
-      setTransactions(prev => prev.map(t => t.id === editingTx.id ? (updated || { ...t, ...reqPayload }) : t));
+      setTransactions(prev => prev.map(t => t.id === editingTx.id ? (updated || { ...t, ...payload }) : t));
       setEditingTx(null);
       showToast('Transaction updated successfully!', 'success');
       window.dispatchEvent(new CustomEvent('smartpocket:data_changed'));

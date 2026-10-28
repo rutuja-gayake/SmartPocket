@@ -79,14 +79,24 @@ export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMoveme
     let incomePaise = 0;
     let expensePaise = 0;
     let netSavingsPaise = 0;
+    let needsExpensePaise = 0;
+    let wantsExpensePaise = 0;
 
     transactions.forEach(tx => {
+      const amt = tx.amount_paise || 0;
       if (tx.type === 'income') {
-        incomePaise += tx.amount_paise;
+        incomePaise += amt;
       } else if (tx.type === 'expense') {
-        expensePaise += tx.amount_paise;
+        expensePaise += amt;
+        if (tx.classification === 'want') {
+          wantsExpensePaise += amt;
+        } else if (tx.classification === 'savings') {
+          netSavingsPaise += amt;
+        } else {
+          needsExpensePaise += amt;
+        }
       } else if (tx.type === 'transfer_savings') {
-        netSavingsPaise += tx.amount_paise;
+        netSavingsPaise += amt;
       }
     });
 
@@ -116,9 +126,9 @@ export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMoveme
       monthlyAllowancePaise: allowanceDetails?.monthlyAllowancePaise || 0,
       allocationBasisPaise: allowanceDetails?.monthlyAllowancePaise || (budget ? budget.total_budget_paise : 0),
       incomePaise,
-      needsPaise: txsRes?.summary?.needs_expense_paise,
-      wantsPaise: txsRes?.summary?.wants_expense_paise,
-      savingsPaise: allowanceDetails?.netSavingsAllocatedPaise,
+      needsPaise: needsExpensePaise,
+      wantsPaise: wantsExpensePaise,
+      savingsPaise: allowanceDetails?.netSavingsAllocatedPaise ?? netSavingsPaise,
       transactions,
       budgetRule: budget || { needs_target_pct: 50, wants_target_pct: 30, savings_target_pct: 20 }
     });
