@@ -9,5 +9,8 @@ __pycache__/
 venv/
 .venv/
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 *.sqlite
 *.sqlite3
