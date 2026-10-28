@@ -97,3 +97,4 @@ test('Unit Tests - Smart Budget Alerts Calculation Engine', async (t) => {
     assert.equal(res.message, 'No monthly budget limit set for this month.');
   });
 });
+
