@@ -74,6 +74,91 @@ export function calculateRemainingBudget(monthlyBudgetPaise, currentMonthExpense
   return monthlyBudgetPaise - currentMonthExpensePaise;
 }
 
+/**
+ * Calculates Smart Budget Alerts based on monthly budget limit and actual expenses.
+ */
+export function calculateBudgetAlert({
+  monthlyBudgetPaise = 0,
+  monthlyExpensePaise = 0
+} = {}) {
+  if (!monthlyBudgetPaise || monthlyBudgetPaise <= 0) {
+    return {
+      hasBudget: false,
+      threshold: null,
+      thresholdPct: 0,
+      usagePct: 0,
+      usagePctExact: 0,
+      monthlyBudgetPaise: 0,
+      monthlyExpensePaise: Math.max(0, monthlyExpensePaise),
+      remainingBudgetPaise: 0,
+      exceededPaise: 0,
+      isExceeded: false,
+      status: 'NO_BUDGET',
+      title: 'No Budget Set',
+      message: 'No monthly budget limit set for this month.'
+    };
+  }
+
+  const cleanExpenses = Math.max(0, monthlyExpensePaise);
+  const rawRemainingPaise = monthlyBudgetPaise - cleanExpenses;
+  const remainingBudgetPaise = Math.max(0, rawRemainingPaise);
+  const exceededPaise = rawRemainingPaise < 0 ? Math.abs(rawRemainingPaise) : 0;
+  const isExceeded = rawRemainingPaise < 0;
+
+  const usagePctExact = (cleanExpenses / monthlyBudgetPaise) * 100;
+  const usagePct = Math.round(usagePctExact);
+
+  let status = 'NORMAL';
+  let threshold = null;
+  let thresholdPct = 0;
+  let title = 'Within Budget';
+  let message = 'You’re within your monthly budget.';
+
+  if (isExceeded) {
+    status = 'EXCEEDED';
+    threshold = 'EXCEEDED';
+    thresholdPct = 100;
+    title = 'Budget Exceeded';
+    const formattedExceeded = formatINR(exceededPaise, exceededPaise % 100 !== 0);
+    message = `Your monthly budget limit has been reached. Avoid unnecessary spending. (Exceeded by ${formattedExceeded})`;
+  } else if (usagePctExact >= 100) {
+    status = 'EXHAUSTED';
+    threshold = '100';
+    thresholdPct = 100;
+    title = 'Budget Exhausted';
+    message = 'Your monthly budget limit has been reached. Avoid unnecessary spending.';
+  } else if (usagePctExact >= 90) {
+    status = 'WARNING';
+    threshold = '90';
+    thresholdPct = 90;
+    title = 'Budget Warning';
+    const formattedRemaining = formatINR(remainingBudgetPaise, remainingBudgetPaise % 100 !== 0);
+    message = `Warning! You have used 90% of your monthly budget. Only ${formattedRemaining} left.`;
+  } else if (usagePctExact >= 75) {
+    status = 'CAUTION';
+    threshold = '75';
+    thresholdPct = 75;
+    title = 'Budget Caution';
+    message = 'You have used 75% of your monthly budget. Spend carefully.';
+  }
+
+  return {
+    hasBudget: true,
+    status,
+    threshold,
+    thresholdPct,
+    usagePct,
+    usagePctExact,
+    monthlyBudgetPaise,
+    monthlyExpensePaise: cleanExpenses,
+    remainingBudgetPaise,
+    exceededPaise,
+    isExceeded,
+    title,
+    message
+  };
+}
+
 export function calculateAvailableToSpend({
   monthlyAllowancePaise = 0,
   monthlySpentPaise = 0,

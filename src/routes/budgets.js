@@ -7,7 +7,8 @@ import { getCurrentPeriod } from '../utils/date.js';
 import {
   calculateAvailableBalance,
   calculateSafeDailySpending,
-  calculate503020Metrics
+  calculate503020Metrics,
+  calculateBudgetAlert
 } from '../services/calculations.js';
 import { validatePeriod } from '../validators/index.js';
 
@@ -107,6 +108,11 @@ function getBudgetDetails(db, userId, period) {
     targets
   });
 
+  const smartBudgetAlert = calculateBudgetAlert({
+    monthlyBudgetPaise,
+    monthlyExpensePaise: periodStats.expense_paise
+  });
+
   return {
     period,
     budget: budget || null,
@@ -121,7 +127,9 @@ function getBudgetDetails(db, userId, period) {
     periodStats,
     safeDaily: safeDailyInfo,
     analysis503020: metrics503020,
-    rule503020: metrics503020
+    rule503020: metrics503020,
+    smartBudgetAlert,
+    budgetAlert: smartBudgetAlert
   };
 }
 

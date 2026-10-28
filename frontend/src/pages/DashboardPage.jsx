@@ -7,6 +7,7 @@ import {
   calculateAvailableToSpend,
   calculateSafeDailySpending,
   calculate503020Metrics,
+  calculateBudgetAlert,
   calculateGoalProgress
 } from '../services/calculations';
 import {
@@ -133,6 +134,11 @@ export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMoveme
       budgetRule: budget || { needs_target_pct: 50, wants_target_pct: 30, savings_target_pct: 20 }
     });
 
+    const budgetAlert = calculateBudgetAlert({
+      monthlyBudgetPaise: budgetPaise,
+      monthlyExpensePaise: expensePaise
+    });
+
     // Chart Data Preparation: Daily Spending Trend
     const daysInMonth = new Date(parseInt(currentPeriod.slice(0, 4), 10), parseInt(currentPeriod.slice(5, 7), 10), 0).getDate();
     const dayLabels = Array.from({ length: daysInMonth }, (_, i) => String(i + 1));
@@ -164,6 +170,7 @@ export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMoveme
       budgetPaise,
       safeDaily,
       rule503020,
+      budgetAlert,
       trendData: {
         labels: dayLabels,
         datasets: [{
@@ -186,6 +193,35 @@ export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMoveme
       }
     };
   }, [transactions, budget, allowanceDetails, currentPeriod]);
+
+  // Trigger Smart Budget Alert notification toast once per threshold per period
+  useEffect(() => {
+    if (!metrics?.budgetAlert || !metrics.budgetAlert.hasBudget) return;
+    const { status, message } = metrics.budgetAlert;
+    const storageKey = `smartpocket_budget_alert_${currentPeriod}`;
+
+    if (status === 'NORMAL') {
+      try {
+        sessionStorage.removeItem(storageKey);
+      } catch (_) {}
+      return;
+    }
+
+    const rankMap = { 'CAUTION': 1, 'WARNING': 2, 'EXHAUSTED': 3, 'EXCEEDED': 4 };
+    const currentRank = rankMap[status] || 0;
+    let lastRank = 0;
+    try {
+      lastRank = parseInt(sessionStorage.getItem(storageKey) || '0', 10);
+    } catch (_) {}
+
+    if (currentRank > lastRank) {
+      try {
+        sessionStorage.setItem(storageKey, String(currentRank));
+      } catch (_) {}
+      const toastType = status === 'CAUTION' ? 'info' : 'error';
+      showToast(message, toastType);
+    }
+  }, [metrics?.budgetAlert, currentPeriod, showToast]);
 
   const openAllowanceModal = () => {
     if (allowanceDetails?.allowance) {
@@ -261,6 +297,155 @@ export default function DashboardPage({ currentPeriod, onOpenAddTx, onOpenMoveme
           </span>
         </div>
       </div>
+
+      {/* Smart Budget Alert Section */}
+      {metrics?.budgetAlert && (
+        <div
+          className="card"
+          style={{
+            marginBottom: '24px',
+            borderLeft: `4px solid ${
+              metrics.budgetAlert.status === 'EXCEEDED' || metrics.budgetAlert.status === 'EXHAUSTED'
+                ? 'var(--color-danger, #ef4444)'
+                : metrics.budgetAlert.status === 'WARNING'
+                ? '#ea580c'
+                : metrics.budgetAlert.status === 'CAUTION'
+                ? '#f59e0b'
+                : metrics.budgetAlert.status === 'NORMAL'
+                ? 'var(--color-primary, #059669)'
+                : 'var(--color-border, #e5e7eb)'
+            }`,
+            backgroundColor:
+              metrics.budgetAlert.status === 'EXCEEDED' || metrics.budgetAlert.status === 'EXHAUSTED'
+                ? 'rgba(239, 68, 68, 0.04)'
+                : metrics.budgetAlert.status === 'WARNING'
+                ? 'rgba(234, 88, 12, 0.04)'
+                : metrics.budgetAlert.status === 'CAUTION'
+                ? 'rgba(245, 158, 11, 0.04)'
+                : 'var(--color-surface, #ffffff)'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '1.25rem' }}>
+                {metrics.budgetAlert.status === 'EXCEEDED' || metrics.budgetAlert.status === 'EXHAUSTED' ? '🚨' :
+                 metrics.budgetAlert.status === 'WARNING' ? '⚠️' :
+                 metrics.budgetAlert.status === 'CAUTION' ? '⚡' : '🎯'}
+              </span>
+              <h3 style={{ fontSize: '1.1rem', color: 'var(--color-text-main)', margin: 0, fontWeight: 700 }}>
+                Smart Budget Alerts
+              </h3>
+            </div>
+            <div>
+              <span
+                className={`status-badge ${
+                  metrics.budgetAlert.status === 'EXCEEDED' || metrics.budgetAlert.status === 'EXHAUSTED'
+                    ? 'exceeded'
+                    : metrics.budgetAlert.status === 'WARNING'
+                    ? 'warning'
+                    : metrics.budgetAlert.status === 'CAUTION'
+                    ? 'caution'
+                    : metrics.budgetAlert.status === 'NORMAL'
+                    ? 'healthy'
+                    : 'no_budget'
+                }`}
+                style={
+                  metrics.budgetAlert.status === 'WARNING'
+                    ? { backgroundColor: '#FFEDD5', color: '#C2410C' }
+                    : metrics.budgetAlert.status === 'CAUTION'
+                    ? { backgroundColor: '#FEF3C7', color: '#B45309' }
+                    : undefined
+                }
+              >
+                {metrics.budgetAlert.title} {metrics.budgetAlert.hasBudget ? `(${metrics.budgetAlert.usagePct}%)` : ''}
+              </span>
+            </div>
+          </div>
+
+          <p style={{
+            fontSize: '0.92rem',
+            fontWeight: 600,
+            color:
+              metrics.budgetAlert.status === 'EXCEEDED' || metrics.budgetAlert.status === 'EXHAUSTED'
+                ? 'var(--color-danger, #ef4444)'
+                : metrics.budgetAlert.status === 'WARNING'
+                ? '#ea580c'
+                : metrics.budgetAlert.status === 'CAUTION'
+                ? '#b45309'
+                : 'var(--color-text-main)',
+            marginBottom: metrics.budgetAlert.hasBudget ? '16px' : '0'
+          }}>
+            {metrics.budgetAlert.message}
+          </p>
+
+          {metrics.budgetAlert.hasBudget && (
+            <div>
+              {/* Progress Bar */}
+              <div style={{ marginBottom: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '5px' }}>
+                  <span>Budget Consumed</span>
+                  <span style={{ fontWeight: 700 }}>{metrics.budgetAlert.usagePctExact.toFixed(1)}%</span>
+                </div>
+                <div style={{ height: '8px', borderRadius: '999px', background: 'var(--color-border, #e5e7eb)', overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${Math.min(100, Math.max(0, metrics.budgetAlert.usagePct))}%`,
+                      backgroundColor:
+                        metrics.budgetAlert.status === 'EXCEEDED' || metrics.budgetAlert.status === 'EXHAUSTED'
+                          ? '#ef4444'
+                          : metrics.budgetAlert.status === 'WARNING'
+                          ? '#ea580c'
+                          : metrics.budgetAlert.status === 'CAUTION'
+                          ? '#f59e0b'
+                          : '#059669',
+                      borderRadius: '999px',
+                      transition: 'width 0.4s ease'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Figures Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
+                <div style={{ padding: '10px 14px', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Monthly Budget
+                  </div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-text-main)', marginTop: '2px' }}>
+                    {formatINR(metrics.budgetAlert.monthlyBudgetPaise)}
+                  </div>
+                </div>
+
+                <div style={{ padding: '10px 14px', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    Actual Spent
+                  </div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-danger, #ef4444)', marginTop: '2px' }}>
+                    {formatINR(metrics.budgetAlert.monthlyExpensePaise)}
+                  </div>
+                </div>
+
+                <div style={{ padding: '10px 14px', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+                    {metrics.budgetAlert.isExceeded ? 'Exceeded Amount' : 'Remaining Budget'}
+                  </div>
+                  <div style={{
+                    fontSize: '1.05rem',
+                    fontWeight: 700,
+                    color: metrics.budgetAlert.isExceeded ? 'var(--color-danger, #ef4444)' : 'var(--color-primary, #059669)',
+                    marginTop: '2px'
+                  }}>
+                    {metrics.budgetAlert.isExceeded
+                      ? `+${formatINR(metrics.budgetAlert.exceededPaise, metrics.budgetAlert.exceededPaise % 100 !== 0)}`
+                      : formatINR(metrics.budgetAlert.remainingBudgetPaise, metrics.budgetAlert.remainingBudgetPaise % 100 !== 0)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Monthly Allowance Interactive Widget */}
       <div className="card" style={{ marginBottom: '24px', borderLeft: '4px solid var(--color-primary)' }}>
