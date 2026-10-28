@@ -15,7 +15,8 @@
     "test:unit": "node --test backend/tests/unit/*.test.js",
     "test:integration": "node --test backend/tests/integration/*.test.js",
     "db:init": "node backend/scripts/init-db.js",
-    "db:seed": "node backend/scripts/seed-db.js"
+    "db:seed": "node backend/scripts/seed-db.js",
+    "db:inspect": "node backend/scripts/inspect-db.js"
   },
   "keywords": [
     "pwa",
